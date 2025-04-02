@@ -1,0 +1,13 @@
+.main-container {
+  display: flex;
+  .main-menu {
+    width: 150px;
+    height: 100%;
+    
+  }
+  .main-content {
+    padding: 10px;
+  }
+}
+
+
