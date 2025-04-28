@@ -64,6 +64,13 @@ export default (appInfo: MidwayAppInfo) => {
         },
       },
     },
+    ali: {
+      accessKey: 'LTAI5tFbkDZKijb9XJ29AAR7',
+      accessSecret: 'NGfpXolqRFBNvxel7wk3rZVzRdMGtN',
+      bucket: {
+        region: 'oss-cn-beijing',
+      },
+    },
     // security: {
     //   csrf: false,
     // },
