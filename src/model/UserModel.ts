@@ -1,4 +1,4 @@
-import { Column, DataType, Model, Table } from 'sequelize-typescript';
+import { Column, DataType, Default, Model, Table } from 'sequelize-typescript';
 
 @Table({
   tableName: 'user',
@@ -35,6 +35,7 @@ export class UserModel extends Model {
   })
   user_mobile: string;
 
+  @Default('whale')
   @Column({
     type: DataType.STRING,
     allowNull: false,

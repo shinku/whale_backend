@@ -1,5 +1,6 @@
 import { Config, Init, Provide } from '@midwayjs/core';
 import * as OSS from 'ali-oss';
+import { Stream } from 'stream';
 import path = require('path');
 export interface IOssConfig {
   accessKey: string;
@@ -10,10 +11,11 @@ export interface IOssConfig {
 }
 
 export interface IUploadOption {
-  filePath: string;
+  filePath?: string;
   fileName?: string;
   folderName?: string;
   override?: 'true' | 'false';
+  stream?: Stream;
 }
 
 export const genUploadHeader = ({ override, filename }) => {
@@ -21,11 +23,9 @@ export const genUploadHeader = ({ override, filename }) => {
     // 指定Object的存储类型。
     'x-oss-storage-class': 'Standard',
     // 指定Object的访问权限。
-    'x-oss-object-acl': 'private',
+    'x-oss-object-acl': 'public',
     // 通过文件URL访问文件时，指定以附件形式下载文件，下载后的文件名称定义为example.txt。
-    'Content-Disposition': 'filename="' + filename + '.txt"',
-    // 设置Object的标签，可同时设置多个标签。
-    'x-oss-tagging': 'Tag1=1&Tag2=2',
+    'Content-Disposition': 'filename="' + filename,
     // 指定PutObject操作时是否覆盖同名目标Object。此处设置为true，表示禁止覆盖同名Object。
     'x-oss-forbid-overwrite': override || 'true',
   };
@@ -40,7 +40,7 @@ export class OssService {
   @Init()
   async init() {
     this.client = OSS({
-      region: 'yourregion',
+      region: this.config.bucket.region,
       // 从环境变量中获取访问凭证。运行本代码示例之前，请确保已设置环境变量OSS_ACCESS_KEY_ID和OSS_ACCESS_KEY_SECRET。
       accessKeyId: this.config.accessKey,
       accessKeySecret: this.config.accessSecret,
@@ -57,12 +57,31 @@ export class OssService {
       override: option.override,
       filename: option.fileName,
     });
-    return await this.client.put(
-      `${option.folderName || ''}${option.fileName}`,
-      path.normalize(option.filePath),
-      {
+    const filePath = path.normalize(option.filePath);
+    return await this.client
+      .put(`${option.folderName || ''}${option.fileName}`, filePath, {
         headers,
-      }
-    );
+      })
+      .catch(e => {
+        console.log(e);
+      });
+  }
+
+  async uploadStream(option: IUploadOption) {
+    const headers = genUploadHeader({
+      override: option.override,
+      filename: option.fileName,
+    });
+    return await this.client
+      .putStream(
+        `${option.folderName || ''}${option.fileName}`,
+        option.stream,
+        {
+          headers,
+        }
+      )
+      .catch(e => {
+        console.log(e);
+      });
   }
 }

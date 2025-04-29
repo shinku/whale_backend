@@ -3,7 +3,7 @@ import { Column, DataType, Default, Model, Table } from 'sequelize-typescript';
 @Table({
   tableName: 'user_feedback',
 })
-export class UserModel extends Model {
+export class UserFeedBack extends Model {
   @Column({
     type: DataType.INTEGER,
     primaryKey: true,
@@ -29,11 +29,11 @@ export class UserModel extends Model {
   })
   feedback_img: string;
 
+  @Default('whale')
   @Column({
     type: DataType.STRING,
     allowNull: false,
     comment: '反馈渠道',
   })
-  @Default('whale')
   lane: string;
 }
