@@ -14,20 +14,20 @@ export interface IUploadOption {
   filePath?: string;
   fileName?: string;
   folderName?: string;
-  override?: 'true' | 'false';
-  stream?: Stream;
+  forbidOverride?: 'true' | 'false';
+  stream?: Stream | Buffer;
 }
 
-export const genUploadHeader = ({ override, filename }) => {
+export const genUploadHeader = ({ forbidOverride, filename }) => {
   return {
     // 指定Object的存储类型。
     'x-oss-storage-class': 'Standard',
     // 指定Object的访问权限。
-    'x-oss-object-acl': 'public',
+    'x-oss-object-acl': 'public-read',
     // 通过文件URL访问文件时，指定以附件形式下载文件，下载后的文件名称定义为example.txt。
     'Content-Disposition': 'filename="' + filename,
     // 指定PutObject操作时是否覆盖同名目标Object。此处设置为true，表示禁止覆盖同名Object。
-    'x-oss-forbid-overwrite': override || 'true',
+    'x-oss-forbid-overwrite': forbidOverride || 'true',
   };
 };
 
@@ -37,6 +37,9 @@ export class OssService {
   config: IOssConfig;
 
   client: OSS;
+
+  mainDomain = 'https://fms.whalepea.com';
+
   @Init()
   async init() {
     this.client = OSS({
@@ -54,22 +57,43 @@ export class OssService {
    */
   async uploadFile(option: IUploadOption) {
     const headers = genUploadHeader({
-      override: option.override,
+      forbidOverride: option.forbidOverride,
       filename: option.fileName,
     });
     const filePath = path.normalize(option.filePath);
-    return await this.client
+    const result = await this.client
       .put(`${option.folderName || ''}${option.fileName}`, filePath, {
         headers,
       })
       .catch(e => {
         console.log(e);
+        throw e;
       });
+    const { url } = result;
+    if (!url) {
+      throw new Error('upload file failed');
+    }
+    // 域名替换
+    // const mainDomain = 'https://fms.whalepea.com';
+    // 命中任意域名正则表达式,包括http和https协议
+    const domainReg = /^https?:\/\/[^/]+/;
+    return { data: url.replace(domainReg, this.mainDomain) };
+  }
+
+  async getFile(src: string, type = 'buffer') {
+    const domainReg = /^(https?:\/\/)?([\w.-]+)(:\d+)?\/api\/file\/get\//;
+    const url = src.replace(domainReg, '');
+    console.log({
+      type,
+      url,
+    });
+    const result = await this.client.get(url);
+    return result;
   }
 
   async uploadStream(option: IUploadOption) {
     const headers = genUploadHeader({
-      override: option.override,
+      forbidOverride: option.forbidOverride,
       filename: option.fileName,
     });
     return await this.client

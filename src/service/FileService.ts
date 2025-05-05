@@ -50,7 +50,7 @@ export class FileService {
       // libreoffice --headless --convert-to docx ./test.pdf --outdir ./test.doc
       const pythonBin = this.pythonConfig?.bin || 'python';
       const cmd = `${pythonBin} ${this.appDir}/call_task/py/office.py --pdf ${pdfPath} --docx ${docxPath}`;
-      //const cmd = 'which python';
+      //const cmd = 'python3 --version';
       switchPythonEnv(cmd).then((cmd: string) => {
         console.log(cmd);
         const cli = spawn(cmd, {
@@ -58,12 +58,18 @@ export class FileService {
         });
         cli.stdout.on('data', data => {
           const log = Buffer.from(data).toString();
-          console.log(log);
+          console.log(log + '\n');
         });
         cli.stdout.on('end', data => {
           resolve(data);
         });
-        cli.stdout.on('error', data => {
+        cli.stderr.on('data', data => {
+          const log = Buffer.from(data).toString();
+          console.log(log + '\n');
+          // reject(log);
+        });
+        cli.stderr.on('error', data => {
+          console.log(data);
           reject(data);
         });
       });

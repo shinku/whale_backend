@@ -11,7 +11,6 @@ args = parser.parse_args()
 
 pdf_file = args.pdf
 docx_file = args.docx
-
 cv = Converter(pdf_file)
 cv.convert(docx_file,layout=True)
 cv.close()

@@ -5,6 +5,6 @@ import { All, Controller, Provide } from '@midwayjs/core';
 export class HomeController {
   @All('/')
   async index() {
-    return { status: 'ok' };
+    return { status: 'ok', data: '正常工作' };
   }
 }

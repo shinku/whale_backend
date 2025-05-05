@@ -10,20 +10,24 @@ import {
 } from '@midwayjs/core';
 import axios from 'axios';
 import { Context } from 'egg';
-import { readFileSync, writeFile } from 'fs';
+import { readFileSync, writeFile, writeFileSync } from 'fs';
 import { join } from 'path';
-import { PassThrough } from 'stream';
+import { PassThrough, Stream } from 'stream';
 import { UserRecordModel } from '../model/UserRecord';
 import { FileService } from '../service/FileService';
 import { ImageService } from '../service/ImageService';
 import { OssService } from '../service/OssService';
 import Api from './api/Api';
 
-export type TActionType = 'clear_hands_write' | 'convert_file' | 'qa';
+export type TActionType =
+  | 'clear_hands_write'
+  | 'convert_file'
+  | 'qa'
+  | 'pic_to_pdf';
 
 export function base64ToImage(base64String, outputFilePath) {
   // 移除Base64编码的前缀（如：data:image/png;base64,）
-  const base64Data = base64String.replace(/^data:image\/\w+;base64,/, '');
+  const base64Data = base64String.replace(/^data:\w+;base64,/, '');
 
   // 将Base64字符串转换为Buffer
   const imageBuffer = Buffer.from(base64Data, 'base64');
@@ -31,11 +35,20 @@ export function base64ToImage(base64String, outputFilePath) {
   // 将Buffer写入文件
   writeFile(outputFilePath, imageBuffer, err => {
     if (err) {
-      console.error('保存图片时出错:', err);
+      console.error('保存文件时出错:', err);
     } else {
-      console.log('图片已成功保存到:', outputFilePath);
+      console.log('文件已成功保存到:', outputFilePath);
     }
   });
+}
+
+export function base64ToBuffer(base64String: string) {
+  // 移除Base64编码的前缀（如：data:image/png;base64,）
+  const base64Data = base64String.replace(/^data:\w+;base64,/, '');
+
+  // 将Base64字符串转换为Buffer
+  const imageBuffer = Buffer.from(base64Data, 'base64');
+  return imageBuffer;
 }
 
 /**
@@ -63,18 +76,12 @@ export class FileController {
 
   @Inject()
   fileService: FileService;
-  @Get('/get/:filename')
-  async accessFile(@Param('filename') filename: string) {
-    const targetFile = join(this.outputDir, '/tmp/', filename);
-    const data = readFileSync(targetFile);
-    const fileType = {
-      jpg: 'image/jpeg',
-      pdf: 'application/pdf',
-      doc: 'application/msword',
-      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    }[filename.split('.').pop()];
-    this.ctx.set('Content-Type', fileType);
-    return data;
+  @Get('/get/:bucketname/:filename')
+  async accessFile(
+    @Param('filename') filename: string,
+    @Param('bucketname') bucketname: string
+  ) {
+    this.ctx.redirect(`https://fms.whalepea.com/${bucketname}/${filename}`);
   }
 
   @Config('outputDir')
@@ -93,19 +100,18 @@ export class FileController {
       case 'clear_hands_write': {
         const result = await this.imageService.eraserHandWriteImage(data);
         const filename = fields.userId + Math.random() * 100 + 'after.jpg';
-
-        // const targetFile = join(this.outputDir, '/tmp/', filename);
-        // base64ToImage(result.data?.result?.image, targetFile);
+        if (result.data.code === 40003) {
+          return {
+            code: 40003,
+            message: '当前主账户余额不足，请联系官方充值',
+          };
+        }
         const stream = base64ToStream(result.data?.result?.image);
-        const upResult = await this.ossService.uploadStream({
+        await this.ossService.uploadStream({
           stream,
           fileName: filename,
-          override: 'true',
+          forbidOverride: 'true',
           folderName: 'pub/',
-        });
-        console.log({
-          upResult,
-          result,
         });
         // 保存文件记录
         try {
@@ -118,7 +124,9 @@ export class FileController {
         } catch (e) {
           console.log(e);
         }
-        return filename;
+        return {
+          file: 'pub/' + filename,
+        };
       }
       case 'convert_file': {
         // 获取coverttype
@@ -137,7 +145,7 @@ export class FileController {
         return result;
       }
       case 'qa': {
-        return await this.getQa(data, fields);
+        // return await this.getQa(data, fields);
       }
     }
   }
@@ -196,25 +204,58 @@ export class FileController {
    *  "file_urls": ["",""]
    * }
    */
-  @Post('/expend2Pdf')
-  async doExpend2Pdf() {
+  @Post('/convert')
+  async doExpend2File() {
     /**
      * 基于request的file_urls参数
      */
     const fileUrls = this.ctx.request.body.file_urls;
-    console.log(fileUrls);
+    const to_type = this.ctx.request.body.to_type || 'pdf';
+    switch (to_type) {
+      case 'pdf': {
+        const stream = await this.imageService.tiImageToPdf(fileUrls);
+        const fileName = `pub/${Date.now()}_${Math.random() * 100}.pdf`;
+        await this.ossService.uploadStream({
+          stream: Stream.Readable.from(stream),
+          fileName: fileName,
+          forbidOverride: 'true',
+        });
+        return fileName;
+      }
+      case 'docx': {
+        const stream = await this.imageService.tiImageToPdf(fileUrls);
+        const fileName = `tmp/${Date.now()}_${Math.random() * 100}.pdf`;
+        const docFileName = `${Date.now()}_${Math.random() * 100}.docx`;
+        // 保存为本地pdf文件
+        writeFileSync(join(this.outputDir, fileName), stream);
+        // 转换为docx
+        await this.fileService.doPdfToWord(
+          join(this.outputDir, fileName),
+          join(this.outputDir, 'tmp/', docFileName)
+        );
+        await this.ossService.uploadStream({
+          stream: Stream.Readable.from(stream),
+          fileName: docFileName,
+          forbidOverride: 'true',
+          folderName: 'pub/',
+        });
+        return 'pub/' + docFileName;
+        //return result;
+      }
+    }
   }
 
-  @Get('/test_file')
+  /*@Get('/test_file')
   async testFile() {
     const targetFile = join(
       this.outputDir,
       '/tmp/',
-      'shingu.gu_1742460021947.docx'
+      'shingu.gu2.219080161279252after.jpg'
     );
     return await this.ossService.uploadFile({
-      fileName: 'pub/shingu.gu_1742460021947.docx',
+      fileName: 'pub/shingu.gu2.219080161279252after.jpg',
       filePath: targetFile,
+      override: 'false',
     });
-  }
+  }*/
 }

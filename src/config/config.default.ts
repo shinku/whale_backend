@@ -14,7 +14,7 @@ export default (appInfo: MidwayAppInfo) => {
       'x-ti-app-id': 'd10b4c43c4c175217a84bfba5486e726',
       'x-ti-secret-code': '8740ac1acaf2647e9a036f158157a886',
     },
-    middleware: ['laneMiddleware', 'allMiddleware'],
+    middleware: ['logMiddleware', 'laneMiddleware', 'allMiddleware'],
     python: {
       bin: 'python3',
     },
@@ -71,8 +71,5 @@ export default (appInfo: MidwayAppInfo) => {
         region: 'oss-cn-beijing',
       },
     },
-    // security: {
-    //   csrf: false,
-    // },
   } as MidwayConfig;
 };
