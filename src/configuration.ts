@@ -10,14 +10,14 @@ import { join } from 'path';
 })
 export class MainConfiguration implements ILifeCycle {
   async onConfigLoad(): Promise<any> {
-    const config = {};
+    const mainConfig = {};
     // 生产上从 /config/config.json 中读取配置
     const configPath = join('/', 'config/config.json');
     if (existsSync(configPath)) {
-      const config = readFileSync(configPath, 'utf-8');
-      const configJson = JSON.parse(config);
+      const configData = readFileSync(configPath, 'utf-8');
+      const configJson = JSON.parse(configData);
       const sequelizeConfig = configJson.sequelize;
-      Object.assign(config, {
+      Object.assign(mainConfig, {
         sequelize: {
           dataSource: {
             default: sequelizeConfig,
@@ -25,7 +25,7 @@ export class MainConfiguration implements ILifeCycle {
         },
       });
     }
-    return config;
+    return mainConfig;
   }
   async onReady() {}
 }
