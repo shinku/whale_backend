@@ -26,6 +26,7 @@ export class MainConfiguration implements ILifeCycle {
         ...sequelizeConfig,
       };
     }
+    console.log('config', this.app.config);
   }
   async onReady() {}
 }
