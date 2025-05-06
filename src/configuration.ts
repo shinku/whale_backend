@@ -12,22 +12,21 @@ export class MainConfiguration implements ILifeCycle {
   @App('egg')
   app: egg.Application;
   async onConfigLoad() {
-    const mainConfig = {};
     // 生产上从 /config/config.json 中读取配置
     const configPath = join('/', 'config/config.json');
+
     if (existsSync(configPath)) {
       const configData = readFileSync(configPath, 'utf-8');
+      console.log({
+        configData,
+      });
       const configJson = JSON.parse(configData);
       const sequelizeConfig = configJson.sequelize;
-      Object.assign(mainConfig, {
-        sequelize: {
-          dataSource: {
-            default: sequelizeConfig,
-          },
-        },
-      });
+      this.app.config.sequelize.dataSource.default = {
+        ...this.app.config.sequelize.dataSource.default,
+        ...sequelizeConfig,
+      };
     }
-    return mainConfig;
   }
   async onReady() {}
 }
