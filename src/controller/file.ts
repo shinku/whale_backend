@@ -10,7 +10,7 @@ import {
 } from '@midwayjs/core';
 import axios from 'axios';
 import { Context } from 'egg';
-import { readFileSync, writeFile, writeFileSync } from 'fs';
+import { readFileSync, unlink, writeFile, writeFileSync } from 'fs';
 import { join } from 'path';
 import { PassThrough, Stream } from 'stream';
 import { UserRecordModel } from '../model/UserRecord';
@@ -82,6 +82,9 @@ export class FileController {
     @Param('bucketname') bucketname: string
   ) {
     this.ctx.redirect(`https://fms.whalepea.com/${bucketname}/${filename}`);
+    //return await axios.get(
+    //  `https://fms.whalepea.com/${bucketname}/${filename}`
+    //);
   }
 
   @Config('outputDir')
@@ -116,7 +119,7 @@ export class FileController {
         // 保存文件记录
         try {
           await UserRecordModel.create({
-            image_url_after: filename,
+            image_url_after: 'pub/' + filename,
             user_id: userId,
             image_url_before: '',
             lane: fields.lane || 'whale',
@@ -204,13 +207,19 @@ export class FileController {
    *  "file_urls": ["",""]
    * }
    */
-  @Post('/convert')
+  @Post('/expend_2_file')
   async doExpend2File() {
     /**
      * 基于request的file_urls参数
      */
     const fileUrls = this.ctx.request.body.file_urls;
     const to_type = this.ctx.request.body.to_type || 'pdf';
+    if (!fileUrls || fileUrls.length === 0) {
+      throw new Error('file_urls is empty');
+    }
+    if (!['pdf', 'docx'].includes(to_type)) {
+      throw new Error('to_type is not support');
+    }
     switch (to_type) {
       case 'pdf': {
         const stream = await this.imageService.tiImageToPdf(fileUrls);
@@ -229,15 +238,24 @@ export class FileController {
         // 保存为本地pdf文件
         writeFileSync(join(this.outputDir, fileName), stream);
         // 转换为docx
+        const pdfPath = join(this.outputDir, fileName);
+        const docxPath = join(this.outputDir, 'tmp/', docFileName);
         await this.fileService.doPdfToWord(
-          join(this.outputDir, fileName),
-          join(this.outputDir, 'tmp/', docFileName)
+          pdfPath, //join(this.outputDir, fileName),
+          docxPath //join(this.outputDir, 'tmp/', docFileName)
         );
-        await this.ossService.uploadStream({
-          stream: Stream.Readable.from(stream),
+        await this.ossService.uploadFile({
+          filePath: join(this.outputDir, 'tmp/', docFileName),
           fileName: docFileName,
           forbidOverride: 'true',
           folderName: 'pub/',
+        });
+        // 删除临时文件
+        unlink(pdfPath, (...params) => {
+          console.log('unlink doc', params);
+        });
+        unlink(docxPath, (...params) => {
+          console.log('unlink pdf', params);
         });
         return 'pub/' + docFileName;
         //return result;
