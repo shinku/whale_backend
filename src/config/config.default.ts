@@ -8,7 +8,9 @@ export default (appInfo: MidwayAppInfo) => {
     outputDir: appInfo.appDir + '/output',
     appDir: appInfo.appDir,
     security: {
-      csrf: false,
+      csrf: {
+        enable: false,
+      },
     },
     egg: {
       port: 7001,
