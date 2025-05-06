@@ -1,4 +1,4 @@
-import { Configuration, ILifeCycle } from '@midwayjs/core';
+import { App, Configuration, ILifeCycle } from '@midwayjs/core';
 import * as sequelize from '@midwayjs/sequelize';
 import * as upload from '@midwayjs/upload';
 import * as egg from '@midwayjs/web';
@@ -9,6 +9,8 @@ import { join } from 'path';
   importConfigs: [join(__dirname, './config')],
 })
 export class MainConfiguration implements ILifeCycle {
+  @App('egg')
+  app: egg.Application;
   async onConfigLoad() {
     const mainConfig = {};
     // 生产上从 /config/config.json 中读取配置
@@ -25,9 +27,6 @@ export class MainConfiguration implements ILifeCycle {
         },
       });
     }
-    console.log({
-      mainConfig,
-    });
     return mainConfig;
   }
   async onReady() {}
