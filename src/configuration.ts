@@ -4,6 +4,7 @@ import * as upload from '@midwayjs/upload';
 import * as egg from '@midwayjs/web';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+
 @Configuration({
   imports: [egg, sequelize, upload],
   importConfigs: [join(__dirname, './config')],

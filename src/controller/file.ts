@@ -10,7 +10,14 @@ import {
 } from '@midwayjs/core';
 import axios from 'axios';
 import { Context } from 'egg';
-import { readFileSync, unlink, writeFile, writeFileSync } from 'fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlink,
+  writeFile,
+  writeFileSync,
+} from 'fs';
 import { join } from 'path';
 import { PassThrough, Stream } from 'stream';
 import { UserRecordModel } from '../model/UserRecord';
@@ -235,7 +242,12 @@ export class FileController {
         const stream = await this.imageService.tiImageToPdf(fileUrls);
         const fileName = `tmp/${Date.now()}_${Math.random() * 100}.pdf`;
         const docFileName = `${Date.now()}_${Math.random() * 100}.docx`;
-        // 保存为本地pdf文件
+        /**
+         * 临时目录
+         */
+        if (!existsSync(join(this.outputDir, 'tmp'))) {
+          mkdirSync(join(this.outputDir, 'tmp'));
+        }
         writeFileSync(join(this.outputDir, fileName), stream);
         // 转换为docx
         const pdfPath = join(this.outputDir, fileName);
