@@ -9,6 +9,6 @@ export class HomeController {
   }
   @All('/status')
   async status() {
-    return { status: 'ok', data: 'status 正常工作' };
+    return { status: 'ok', data: 'status working' };
   }
 }
