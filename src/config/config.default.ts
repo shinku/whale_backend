@@ -9,6 +9,7 @@ export default (appInfo: MidwayAppInfo) => {
     appDir: appInfo.appDir,
     egg: {
       port: 7001,
+      hostname: '0.0.0.0',
     },
     textin: {
       'x-ti-app-id': 'd10b4c43c4c175217a84bfba5486e726',
