@@ -7,4 +7,8 @@ export class HomeController {
   async index() {
     return { status: 'ok', data: '正常工作' };
   }
+  @All('/status')
+  async status() {
+    return { status: 'ok', data: 'status 正常工作' };
+  }
 }

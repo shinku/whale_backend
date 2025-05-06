@@ -9,7 +9,7 @@ import { join } from 'path';
   importConfigs: [join(__dirname, './config')],
 })
 export class MainConfiguration implements ILifeCycle {
-  async onConfigLoad(): Promise<any> {
+  async onConfigLoad() {
     const mainConfig = {};
     // 生产上从 /config/config.json 中读取配置
     const configPath = join('/', 'config/config.json');
@@ -25,6 +25,9 @@ export class MainConfiguration implements ILifeCycle {
         },
       });
     }
+    console.log({
+      mainConfig,
+    });
     return mainConfig;
   }
   async onReady() {}
