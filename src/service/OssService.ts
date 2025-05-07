@@ -83,10 +83,6 @@ export class OssService {
   async getFile(src: string, type = 'buffer') {
     const domainReg = /^(https?:\/\/)?([\w.-]+)(:\d+)?\/api\/file\/get\//;
     const url = src.replace(domainReg, '');
-    console.log({
-      type,
-      url,
-    });
     const result = await this.client.get(url);
     return result;
   }

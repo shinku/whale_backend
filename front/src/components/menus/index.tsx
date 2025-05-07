@@ -11,15 +11,17 @@ export const AdminMenu = ()=>{
     setSelectedIndex(routers.findIndex(item=>item.path === params.pathname))
   },[params])
 
+
   return <Menu mode='inline' selectedKeys={[selectedIndex.toString()]}>
         {
           routers.map((item,index)=>
             <MenuItem key={index} >
               <div>
-                <Link to={item.path} >{item.name}</Link>
+                <Link to={item.path} > {item.name} </Link>
               </div>
             </MenuItem>
           )
         }
+       
   </Menu>
 }

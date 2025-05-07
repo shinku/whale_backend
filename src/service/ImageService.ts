@@ -36,6 +36,7 @@ export const IMAGE_HANDLE_APIS = {
    */
   handwritten_erase: 'https://api.textin.com/ai/service/v1/handwritten_erase',
   img_to_pdf: 'https://api.textin.com/ai/service/v1/file-convert/image-to-pdf',
+  pdf_to_docx: 'https://api.textin.com/ai/service/v1/file-convert/pdf-to-word',
 };
 
 @Provide()
@@ -105,6 +106,18 @@ export class ImageService {
     }
 
     const stream = base64ToBuffer(result.data.result);
+    return stream;
+  }
+  async tiPdfToDocx(stream: Buffer) {
+    const result = await axios.post(IMAGE_HANDLE_APIS.pdf_to_docx, stream, {
+      headers: this.decorHeader({
+        'Content-Type': 'application/octet-stream',
+      }),
+      responseType: 'json',
+    });
+    if (result.data.code !== 200) {
+      throw new Error(getCodeMessage(result.data.code) || 'PDF转Word失败');
+    }
     return stream;
   }
 }
