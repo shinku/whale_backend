@@ -36,7 +36,7 @@
   },
   "scripts": {
     "start_back": "NODE_ENV=production node ./bootstrap.js",
-    "start":"NODE_ENV=production pm2 start ./bootstrap.js --name midway_app -i 4",
+    "start":"pm2 stop midway_app && NODE_ENV=production pm2 start ./bootstrap.js --name midway_app -i 4",
     "dev-app": "cross-env ets && cross-env NODE_ENV=local mwtsc --watch --run @midwayjs/mock/app.js",
     "dev": "node dev.js",
     "test": "cross-env NODE_ENV=unittest NODE_OPTIONS=--require=ts-node/register jest",
