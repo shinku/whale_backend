@@ -239,32 +239,25 @@ export class FileController {
         return fileName;
       }
       case 'docx': {
+        // 将图片合并为pdf
         const stream = await this.imageService.tiImageToPdf(fileUrls);
-        const fileName = `tmp/${Date.now()}_${Math.random() * 100}.pdf`;
+        // const fileName = `tmp/${Date.now()}_${Math.random() * 100}.pdf`;
         const docFileName = `${Date.now()}_${Math.random() * 100}.docx`;
+        const uploadedDoc = await this.imageService.tiPdfToDocx(stream);
         /**
          * 临时目录
          */
         if (!existsSync(join(this.outputDir, 'tmp'))) {
           mkdirSync(join(this.outputDir, 'tmp'));
         }
-        writeFileSync(join(this.outputDir, fileName), stream);
-        // 转换为docx
-        const pdfPath = join(this.outputDir, fileName);
         const docxPath = join(this.outputDir, 'tmp/', docFileName);
-        await this.fileService.doPdfToWord(
-          pdfPath, //join(this.outputDir, fileName),
-          docxPath //join(this.outputDir, 'tmp/', docFileName)
-        );
+        writeFileSync(docxPath, uploadedDoc);
+        // 将doc文件上传到oss
         await this.ossService.uploadFile({
-          filePath: join(this.outputDir, 'tmp/', docFileName),
+          filePath: docxPath,
           fileName: docFileName,
           forbidOverride: 'true',
           folderName: 'pub/',
-        });
-        // 删除临时文件
-        unlink(pdfPath, (...params) => {
-          console.log('unlink doc', params);
         });
         unlink(docxPath, (...params) => {
           console.log('unlink pdf', params);

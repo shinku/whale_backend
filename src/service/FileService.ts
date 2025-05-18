@@ -1,7 +1,8 @@
-import { Config, Provide } from '@midwayjs/core';
+import { Config, Inject, Provide } from '@midwayjs/core';
 import { spawn } from 'child_process';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { ImageService } from './ImageService';
 
 export const switchPythonEnv = async (cmd: string) => {
   return cmd;
@@ -17,9 +18,14 @@ export class FileService {
 
   @Config('appDir')
   appDir: string;
+
+  @Inject()
+  imageService: ImageService;
+
   async convert(option: {
-    type: 'pdf2doc' | string;
-    file: string;
+    type: 'pdf2doc' | 'pdf2doc_textin' | string;
+    file?: string;
+    stream?: Buffer;
     userId: string;
   }) {
     switch (option.type) {
@@ -31,6 +37,9 @@ export class FileService {
         const targetFile = join(this.outputDir, '/tmp', filename);
         await this.doPdfToWord(option.file, targetFile);
         return filename;
+      }
+      case 'pdf2doc_textin': {
+        return this.imageService.tiPdfToDocx(option.stream);
       }
     }
   }

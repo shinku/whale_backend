@@ -108,6 +108,11 @@ export class ImageService {
     const stream = base64ToBuffer(result.data.result);
     return stream;
   }
+  /**
+   * 合合信息的pdf转doc接口
+   * @param stream
+   * @returns
+   */
   async tiPdfToDocx(stream: Buffer) {
     const result = await axios.post(IMAGE_HANDLE_APIS.pdf_to_docx, stream, {
       headers: this.decorHeader({
@@ -118,6 +123,6 @@ export class ImageService {
     if (result.data.code !== 200) {
       throw new Error(getCodeMessage(result.data.code) || 'PDF转Word失败');
     }
-    return stream;
+    return base64ToBuffer(result.data.result);
   }
 }
