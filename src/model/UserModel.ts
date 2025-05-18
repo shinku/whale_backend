@@ -15,7 +15,7 @@ export class UserModel extends Model {
     type: DataType.STRING,
     allowNull: false,
   })
-  user_id: string;
+  openid: string;
 
   @Column({
     type: DataType.STRING,
@@ -34,6 +34,12 @@ export class UserModel extends Model {
     allowNull: true,
   })
   user_mobile: string;
+
+  @Column({
+    type: DataType.BOOLEAN,
+    allowNull: true,
+  })
+  agree_first_deal: boolean;
 
   @Default('whale')
   @Column({
