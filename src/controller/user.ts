@@ -44,6 +44,7 @@ export class user {
   @Put('/user/agree_first_deal/:deal')
   async setUserInfo() {
     const { userId } = this.ctx;
+    console.log(userId);
     const { deal } = this.ctx.params;
     const record = await UserModel.findOne({
       where: {

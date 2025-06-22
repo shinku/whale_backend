@@ -1,8 +1,9 @@
 import { Config, Inject, Provide } from '@midwayjs/core';
 import { spawn } from 'child_process';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, unlink, writeFileSync } from 'fs';
 import { join } from 'path';
 import { ImageService } from './ImageService';
+import { OssService } from './OssService';
 
 export const switchPythonEnv = async (cmd: string) => {
   return cmd;
@@ -22,6 +23,9 @@ export class FileService {
   @Inject()
   imageService: ImageService;
 
+  @Inject()
+  ossService: OssService;
+
   async convert(option: {
     type: 'pdf2doc' | 'pdf2doc_textin' | string;
     file?: string;
@@ -39,7 +43,27 @@ export class FileService {
         return filename;
       }
       case 'pdf2doc_textin': {
-        return this.imageService.tiPdfToDocx(option.stream);
+        let stream = option.stream;
+        if (!stream) {
+          stream = readFileSync(join(option.file));
+        }
+        const uploadedDoc = await this.imageService.tiPdfToDocx(stream);
+        const docFileName = `${option.userId}_${Date.now()}.docx`;
+        if (!existsSync(join(this.outputDir, 'tmp'))) {
+          mkdirSync(join(this.outputDir, 'tmp'));
+        }
+        const docxPath = join(this.outputDir, 'tmp/', docFileName);
+        writeFileSync(docxPath, uploadedDoc);
+        await this.ossService.uploadFile({
+          filePath: docxPath,
+          fileName: docFileName,
+          forbidOverride: 'true',
+          folderName: 'pub/',
+        });
+        unlink(docxPath, (...params) => {
+          console.log('unlink pdf', params);
+        });
+        return 'pub/' + docFileName;
       }
     }
   }

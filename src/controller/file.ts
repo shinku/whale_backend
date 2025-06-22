@@ -152,7 +152,7 @@ export class FileController {
           image_url_before: '',
           lane: fields.lane || 'whale',
         });
-        return result;
+        return { file: result };
       }
       case 'qa': {
         // return await this.getQa(data, fields);

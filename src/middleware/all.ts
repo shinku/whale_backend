@@ -5,10 +5,9 @@ import { IMiddleware } from 'egg';
 export class AllMiddleware implements IMiddleware {
   resolve() {
     return async (ctx, next) => {
+      ctx.set('Content-Type', 'application/json; charset=utf-8');
       try {
         const result = await next();
-
-        ctx.set('Content-Type', 'application/json; charset=utf-8');
         if (typeof result === 'object') {
           return (ctx.body = {
             status: 200,
