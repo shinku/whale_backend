@@ -41,10 +41,31 @@ export class user {
     };
   }
 
+  @Put('/user/')
+  async updateUserInfo() {
+    const { userId } = this.ctx;
+    const { avator_url, user_name } = this.ctx.request.body;
+    const record = await UserModel.findOne({
+      where: {
+        openid: userId,
+      },
+    });
+    if (!record) {
+      throw new Error('user_not_existed');
+    }
+    if (avator_url) {
+      record.user_avator = avator_url;
+    }
+    if (user_name) {
+      record.user_name = user_name;
+    }
+    await record.save();
+    return 'done';
+  }
+
   @Put('/user/agree_first_deal/:deal')
   async setUserInfo() {
     const { userId } = this.ctx;
-    console.log(userId);
     const { deal } = this.ctx.params;
     const record = await UserModel.findOne({
       where: {

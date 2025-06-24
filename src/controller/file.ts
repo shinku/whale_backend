@@ -100,8 +100,25 @@ export class FileController {
   @Inject()
   ossService: OssService;
 
-  @Post('/upload/:action')
+  @Post('/upload')
   async uploadFile(@Files() files, @Fields() fields) {
+    console.log({
+      fields,
+    });
+    const filePath = files[0].data;
+    if (filePath) {
+      const result = await this.ossService.uploadFile({
+        filePath: filePath,
+        fileName: filePath.split('/').pop(),
+      });
+      return result;
+    } else {
+      throw new Error('file_upload_fail');
+    }
+  }
+
+  @Post('/upload/:action')
+  async uploadAndActionFile(@Files() files, @Fields() fields) {
     const action = this.ctx.params['action'] as TActionType;
 
     const userId = fields.userId || this.ctx.get('x-user-id');
