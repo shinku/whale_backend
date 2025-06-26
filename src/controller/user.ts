@@ -1,6 +1,7 @@
-import { Get, Inject, Provide, Put } from '@midwayjs/core';
+import { Get, Inject, Post, Provide, Put } from '@midwayjs/core';
 import { Context } from 'egg';
 import { LANE } from '../core/enums';
+import { UserFeedBack } from '../model/UserFeedBack';
 import { UserModel } from '../model/UserModel';
 import { WehchatApiService } from '../service/WechatApiService';
 import Api from './api/Api';
@@ -20,7 +21,7 @@ export class user {
     const token = this.ctx.params.token;
     // 通过微信api获取基本信息
     const baseInfo = await this.wechatService.getBaseUserInfo(token);
-    const { openid } = baseInfo;
+    const { openid, session_key } = baseInfo;
     const [record] = await UserModel.findOrCreate<UserModel>({
       attributes: [
         'openid',
@@ -34,17 +35,22 @@ export class user {
         lane,
         openid,
       },
+      raw: true,
       //  where: { token, lane, openid: '' },
     });
+    console.log({ record });
     return {
-      data: record.dataValues,
+      data: {
+        ...record,
+        session_key,
+      },
     };
   }
 
   @Put('/user/')
   async updateUserInfo() {
     const { userId } = this.ctx;
-    const { avator_url, user_name } = this.ctx.request.body;
+    const { avator_url, user_name, user_mobile } = this.ctx.request.body;
     const record = await UserModel.findOne({
       where: {
         openid: userId,
@@ -58,6 +64,9 @@ export class user {
     }
     if (user_name) {
       record.user_name = user_name;
+    }
+    if (user_mobile) {
+      record.user_mobile = user_mobile;
     }
     await record.save();
     return 'done';
@@ -84,6 +93,22 @@ export class user {
     };
     record.agree_first_deal = agreeFirstDeal[deal];
     await record.save();
+    return 'done';
+  }
+
+  @Post('/user/feed_back')
+  async addFeedBack() {
+    const { message } = this.ctx.request.body;
+    if (!message) {
+      throw new Error('message_required');
+    }
+    const { userId } = this.ctx;
+    const lane = this.ctx.lane || LANE.WHALE;
+    await UserFeedBack.create({
+      message,
+      user_id: userId,
+      lane,
+    });
     return 'done';
   }
 }
