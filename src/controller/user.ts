@@ -4,6 +4,7 @@ import { LANE } from '../core/enums';
 import { UserFeedBack } from '../model/UserFeedBack';
 import { UserModel } from '../model/UserModel';
 import { PointService } from '../service/PointService';
+import { VipService } from '../service/VipService';
 import { WehchatApiService } from '../service/WechatApiService';
 import Api from './api/Api';
 
@@ -18,6 +19,9 @@ export class user {
 
   @Inject()
   pointerService: PointService;
+
+  @Inject()
+  vipService: VipService;
 
   @Get('/user/:token')
   async getUserInfo() {
@@ -43,10 +47,12 @@ export class user {
       //  where: { token, lane, openid: '' },
     });
     const amount = await this.pointerService.userInitialization(openid);
+    const vipInfo = await this.vipService.userVipInitializatin(openid);
     // 判断当前用户是否有积分记录，如果没有，则表示第一次注册，会根据一定规则赠送部分积分
     return {
       data: {
         ...record,
+        ...vipInfo,
         amount,
         session_key,
       },
