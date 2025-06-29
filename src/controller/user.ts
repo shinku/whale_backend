@@ -3,6 +3,7 @@ import { Context } from 'egg';
 import { LANE } from '../core/enums';
 import { UserFeedBack } from '../model/UserFeedBack';
 import { UserModel } from '../model/UserModel';
+import { PointService } from '../service/PointService';
 import { WehchatApiService } from '../service/WechatApiService';
 import Api from './api/Api';
 
@@ -14,6 +15,9 @@ export class user {
 
   @Inject()
   wechatService: WehchatApiService;
+
+  @Inject()
+  pointerService: PointService;
 
   @Get('/user/:token')
   async getUserInfo() {
@@ -38,10 +42,12 @@ export class user {
       raw: true,
       //  where: { token, lane, openid: '' },
     });
-    console.log({ record });
+    const amount = await this.pointerService.userInitialization(openid);
+    // 判断当前用户是否有积分记录，如果没有，则表示第一次注册，会根据一定规则赠送部分积分
     return {
       data: {
         ...record,
+        amount,
         session_key,
       },
     };
@@ -110,5 +116,19 @@ export class user {
       lane,
     });
     return 'done';
+  }
+
+  /**
+   *
+   * @returns 修改积分
+   */
+  @Put('/user/point')
+  async setPointForUser() {
+    const { point, action = 'increase' } = this.ctx.request.body;
+    const { userId } = this.ctx;
+    if (!point) {
+      throw new Error('need_point');
+    }
+    return await this.pointerService.modifyPoint(userId, point, action);
   }
 }

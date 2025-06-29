@@ -21,5 +21,5 @@ export class UserPointModel extends Model {
     type: DataType.INTEGER,
     allowNull: true,
   })
-  amount: string;
+  amount: number;
 }
