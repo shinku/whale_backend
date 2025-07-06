@@ -19,12 +19,12 @@ export class MainConfiguration implements ILifeCycle {
     if (existsSync(configPath)) {
       const configData = readFileSync(configPath, 'utf-8');
       const configJson = JSON.parse(configData);
-      const sequelizeConfig = configJson.sequelize || {};
+      // const sequelizeConfig = configJson.sequelize || {};
       Object.assign(this.app.config, configJson);
-      this.app.config.sequelize.dataSource.default = {
+      /*this.app.config.sequelize.dataSource.default = {
         ...(this.app.config.sequelize.dataSource.default || {}),
         ...sequelizeConfig,
-      };
+      };*/
     }
     console.log('Config', this.app.config);
   }
