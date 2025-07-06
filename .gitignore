@@ -13,3 +13,4 @@ run/
 .tsbuildinfo.*
 output
 config.local.ts
+*/config/config.json
