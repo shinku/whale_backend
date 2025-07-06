@@ -24,8 +24,13 @@ export class MainConfiguration implements ILifeCycle {
         ...(this.app.config.sequelize.dataSource.default || {}),
         ...sequelizeConfig,
       };*/
+    } else {
+      const conf =
+        readFileSync(join(__dirname, './config/config.json'), 'utf-8') || '{}';
+      console.log({ conf });
+      //Object.assign(this.app.config, JSON.parse(conf));
     }
-    console.log('应用配置:', this.app.config);
+    console.log('seq', this.app.config.sequelize.dataSource.default);
     return this.app.config;
   }
   async onReady() {}
