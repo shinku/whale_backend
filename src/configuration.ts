@@ -15,7 +15,6 @@ export class MainConfiguration implements ILifeCycle {
   async onConfigLoad() {
     // 生产上从 /config/config.json 中读取配置
     const configPath = join('/', 'config/config.json');
-    console.log('dataSource', this.app.config.sequelize.dataSource.default);
     if (existsSync(configPath)) {
       const configData = readFileSync(configPath, 'utf-8');
       const configJson = JSON.parse(configData);
@@ -26,7 +25,8 @@ export class MainConfiguration implements ILifeCycle {
         ...sequelizeConfig,
       };*/
     }
-    console.log('Config', this.app.config);
+    console.log('应用配置:', this.app.config);
+    return this.app.config;
   }
   async onReady() {}
 }

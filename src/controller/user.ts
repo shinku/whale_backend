@@ -27,6 +27,7 @@ export class user {
   async getUserInfo() {
     const lane = this.ctx.lane || LANE.WHALE;
     const token = this.ctx.params.token;
+    console.log('token', token);
     // 通过微信api获取基本信息
     const baseInfo = await this.wechatService.getBaseUserInfo(token);
     const { openid, session_key } = baseInfo;

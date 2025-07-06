@@ -47,20 +47,7 @@ export default (appInfo: MidwayAppInfo) => {
     },
     sequelize: {
       dataSource: {
-        default: {
-          database: 'whale_db',
-          host: '127.0.0.1',
-          port: 3306,
-          username: 'root',
-          password: 'STARKU0303',
-          dialect: 'mysql',
-          define: { charset: 'utf8' },
-          timezone: '+08:00',
-          // 本地的时候，可以通过 sync: true 直接 createTable
-          sync: true,
-          entities: ['model'],
-          logging: false,
-        },
+        default: {},
       },
     },
   } as MidwayConfig;
