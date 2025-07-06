@@ -16,16 +16,9 @@ export default (appInfo: MidwayAppInfo) => {
       port: 7001,
       hostname: '0.0.0.0',
     },
-    textin: {
-      'x-ti-app-id': 'd10b4c43c4c175217a84bfba5486e726',
-      'x-ti-secret-code': '8740ac1acaf2647e9a036f158157a886',
-    },
     middleware: ['logMiddleware', 'laneMiddleware', 'allMiddleware'],
     python: {
       bin: 'python3',
-    },
-    deepseek: {
-      appId: 'sk-e2deea5dcf844555aa28e1',
     },
     upload: {
       // mode: UploadMode, 默认为file，即上传到服务器临时目录，可以配置为 stream
@@ -68,13 +61,6 @@ export default (appInfo: MidwayAppInfo) => {
           entities: ['model'],
           logging: false,
         },
-      },
-    },
-    ali: {
-      accessKey: 'LTAI5tFbkDZKijb9XJ29AAR7',
-      accessSecret: 'NGfpXolqRFBNvxel7wk3rZVzRdMGtN',
-      bucket: {
-        region: 'oss-cn-beijing',
       },
     },
   } as MidwayConfig;
