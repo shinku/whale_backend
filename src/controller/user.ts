@@ -31,8 +31,6 @@ export class user {
     // 通过微信api获取基本信息
     const baseInfo = await this.wechatService.getBaseUserInfo(token);
     const { openid, session_key } = baseInfo;
-    const test = await UserModel.sequelize.query('select * from user');
-    console.log('test', test);
     const [record] = await UserModel.findOrCreate<UserModel>({
       attributes: [
         'openid',

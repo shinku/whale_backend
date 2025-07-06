@@ -25,12 +25,26 @@ export class MainConfiguration implements ILifeCycle {
         ...sequelizeConfig,
       };*/
     } else {
-      const conf =
-        readFileSync(join(__dirname, './config/config.json'), 'utf-8') || '{}';
-      console.log({ conf });
+      this.app.config.sequelize = {
+        dataSource: {
+          default: {
+            database: 'whale_db',
+            host: '127.0.0.1',
+            port: 3306,
+            username: 'root',
+            password: 'STARKU0303',
+            dialect: 'mysql',
+            define: { charset: 'utf8' },
+            timezone: '+08:00',
+            // 本地的时候，可以通过 sync: true 直接 createTable
+            sync: true,
+            entities: ['model'],
+            logging: false,
+          },
+        },
+      };
       //Object.assign(this.app.config, JSON.parse(conf));
     }
-    console.log('seq', this.app.config.sequelize.dataSource.default);
     return this.app.config;
   }
   async onReady() {}
