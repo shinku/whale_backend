@@ -1,20 +1,20 @@
-import { Config, Inject, Post, Provide } from "@midwayjs/core";
-import { Context } from "egg";
-import Api from "./Api";
+import { Config, Inject, Post, Provide } from '@midwayjs/core';
+import { Context } from 'egg';
+import Api from './Api';
 
 @Api('/convert')
 @Provide()
 export class Convert {
   @Inject()
-  ctx: Context
+  ctx: Context;
 
-  @Config("outputDir")
+  @Config('outputDir')
   outputDir: string;
   //清除手写图片
   @Post('/clear_hand_write')
-  async clearHandWrite(){
+  async clearHandWrite() {
     //const userId = this.ctx.userId;
     //const image = this.ctx.request.body;
-    console.log(this.outputDir)
+    console.log(this.outputDir);
   }
 }

@@ -1,4 +1,11 @@
-import { Column, DataType, Default, Model, Table } from 'sequelize-typescript';
+import {
+  Column,
+  DataType,
+  Default,
+  Index,
+  Model,
+  Table,
+} from 'sequelize-typescript';
 
 @Table({
   tableName: 'banner',
@@ -18,6 +25,7 @@ export class BannerModel extends Model {
   })
   lane: string;
 
+  @Index
   @Column({
     type: DataType.STRING,
     comment: 'active/deactive',
@@ -28,8 +36,25 @@ export class BannerModel extends Model {
   @Column({
     type: DataType.STRING,
     allowNull: false,
+    comment: '跳转链接',
   })
   action: string;
+
+  @Column({
+    type: DataType.STRING,
+    allowNull: false,
+    comment: 'banner name',
+  })
+  name: string;
+
+  @Index
+  @Default('normal')
+  @Column({
+    type: DataType.STRING,
+    allowNull: false,
+    comment: 'banner type : normal/icon',
+  })
+  type: string;
 
   @Column({
     type: DataType.STRING,

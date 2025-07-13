@@ -35,6 +35,7 @@ export default (appInfo: MidwayAppInfo) => {
         '.wbmp',
         '.webp',
         '.pdf',
+        '.svg',
       ],
       // tmpdir: string，上传的文件临时存储路径
       tmpdir: join(appInfo.appDir + '/output', 'midway-upload-files'),

@@ -17,12 +17,27 @@ export class BannerController {
   async getBanner() {
     const lane = this.ctx.query.lane || 'whale';
     const status = this.ctx.query.status || 'active';
-    return await BannerModel.findAll({
+    const type = this.ctx.query.type;
+    const { offset = '0', limit = '10' } = this.ctx.query;
+    const option: any = {
       where: {
         status,
         lane,
       },
-    });
+      limit: Number(limit),
+      offset: Number(offset),
+    };
+    if (type) {
+      option.where.type = type;
+    }
+    const count = await BannerModel.count(option);
+    const result = await BannerModel.findAll(option);
+    return {
+      data: {
+        count,
+        list: result,
+      },
+    };
   }
 
   /**
@@ -32,11 +47,14 @@ export class BannerController {
    */
   @Put('/')
   async updateBanner() {
-    const { id, status, banner_image, action } = this.ctx.request.body;
+    const { id, status, banner_image, action, name, type } =
+      this.ctx.request.body;
     const updateOption = {
       status,
       banner_image,
       action,
+      name,
+      type,
     };
     if (!id) {
       throw new Error('id_is_required');
@@ -46,11 +64,14 @@ export class BannerController {
         delete updateOption[key];
       }
     });
-    return await BannerModel.update(updateOption, {
+    await BannerModel.update(updateOption, {
       where: {
         id,
       },
     });
+    return {
+      data: 'done',
+    };
   }
 
   /**
@@ -58,7 +79,14 @@ export class BannerController {
    */
   @Post('/')
   async addBanner() {
-    const { banner_image, action, lane } = this.ctx.request.body;
+    const {
+      banner_image,
+      action,
+      lane,
+      name,
+      type,
+      status = 'active',
+    } = this.ctx.request.body;
     if (!banner_image && !action) {
       throw new Error('banner_image_or_action_is_required');
     }
@@ -66,6 +94,9 @@ export class BannerController {
       banner_image,
       action,
       lane: lane || 'whale',
+      status,
+      name,
+      type,
     });
   }
 }

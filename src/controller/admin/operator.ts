@@ -1,10 +1,12 @@
 import { Get, Inject, Post, Provide, Put } from '@midwayjs/core';
 import { randomUUID } from 'crypto';
 import { Context } from 'egg';
+
 import { Op } from 'sequelize';
 import { AppOperateModel } from '../../model/AppOperate';
 import { ObjectNonNull } from '../../utils';
-import Api from '../api/Api';
+import { AdminApi } from '../api/Api';
+const moment = require('moment');
 /**
  * 运营接口用于管理运营事宜，主要为日常活动
  * 配置项为 {
@@ -15,7 +17,7 @@ import Api from '../api/Api';
 /**
  * 运营
  */
-@Api('/operator')
+@AdminApi('/operator')
 @Provide()
 export class Operator {
   @Inject()
@@ -28,32 +30,46 @@ export class Operator {
   async getOperatorList() {
     const lane = this.ctx.request.query.lane || 'whale';
     const { offset = '0', limit = '10' } = this.ctx.request.query;
-    return AppOperateModel.findAll({
+    const whereOption = {
+      lane,
+      available_start: {
+        [Op.lte]: moment(Date.now()).format('YYYY-MM-DD HH:mm:ss'),
+      },
+      [Op.or]: [
+        {
+          available_end: {
+            [Op.gte]: moment(Date.now()).format('YYYY-MM-DD HH:mm:ss'),
+          },
+        },
+        {
+          available_end: {
+            [Op.is]: null,
+          },
+        },
+      ],
+    };
+    console.log({ whereOption });
+    const count = await AppOperateModel.count({
+      where: whereOption,
+    });
+    const res = await AppOperateModel.findAll({
       attributes: ['icon', 'name', 'config'],
       where: {
-        lane,
-        available_start: {
-          [Op.lte]: Date.now(),
-        },
-        [Op.or]: [
-          {
-            available_end: {
-              [Op.gte]: Date.now(),
-            },
-          },
-          {
-            available_end: null,
-          },
-          {
-            available_end: '',
-          },
-        ],
+        ...whereOption,
       },
       limit: Number(limit),
       offset: Number(offset),
+      raw: true,
     });
+    console.log({ res });
+    return {
+      data: {
+        count,
+        list: res,
+      },
+    };
   }
-  @Post('/add')
+  @Post('/')
   /**
    * 新增运维数据
    */
@@ -75,7 +91,7 @@ export class Operator {
     return oId;
   }
 
-  @Put('/set/:oId')
+  @Put('/:oId')
   /**
    * 更新运维数据
    */

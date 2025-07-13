@@ -13,6 +13,7 @@
     "ali-oss": "^6.22.0",
     "axios": "^1.8.3",
     "egg": "^2.0.0",
+    "moment": "^2.30.1",
     "mysql2": "^3.13.0",
     "sequelize": "^6.37.6",
     "sequelize-typescript": "^2.1.6"
@@ -36,7 +37,7 @@
   },
   "scripts": {
     "start_back": "NODE_ENV=production node ./bootstrap.js",
-    "start":"pm2 stop midway_app || true && NODE_ENV=production pm2 start ./bootstrap.js --name midway_app -i 4",
+    "start": "pm2 stop midway_app || true && NODE_ENV=production pm2 start ./bootstrap.js --name midway_app -i 4",
     "dev-app": "cross-env ets && cross-env NODE_ENV=local mwtsc --watch --run @midwayjs/mock/app.js",
     "dev": "node dev.js",
     "test": "cross-env NODE_ENV=unittest NODE_OPTIONS=--require=ts-node/register jest",

@@ -105,6 +105,9 @@ export class FileController {
     console.log({
       fields,
     });
+    if (!files || files.length === 0) {
+      throw new Error('file_is_empty');
+    }
     const filePath = files[0].data;
     if (filePath) {
       const result = await this.ossService.uploadFile({
