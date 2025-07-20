@@ -16,14 +16,17 @@ export class BannerController {
   @Get('/')
   async getBanner() {
     const lane = this.ctx.query.lane || 'whale';
-    const status = this.ctx.query.status || 'active';
+    const status = this.ctx.query.status;
     const type = this.ctx.query.type;
-    const { offset = '0', limit = '10' } = this.ctx.query;
+    const { offset = '0', limit = '20' } = this.ctx.query;
+    const whereOption = {
+      lane,
+    };
+    if (status) {
+      whereOption['status'] = status;
+    }
     const option: any = {
-      where: {
-        status,
-        lane,
-      },
+      where: whereOption,
       limit: Number(limit),
       offset: Number(offset),
     };
