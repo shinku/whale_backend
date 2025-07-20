@@ -21,7 +21,7 @@ export class AllMiddleware implements IMiddleware {
         }
       } catch (e) {
         if (ctx.status === 404) {
-          ctx.status = 404;
+          ctx.status = 500;
           ctx.body = {
             status: 404,
             message: e.message,
