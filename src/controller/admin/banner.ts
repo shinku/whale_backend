@@ -98,5 +98,8 @@ export class BannerController {
       name,
       type,
     });
+    return {
+      data: 'done',
+    };
   }
 }
