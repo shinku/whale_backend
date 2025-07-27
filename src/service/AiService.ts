@@ -80,7 +80,7 @@ export class AIService {
       }
       case 'math': {
         this.deepSeekClient.systemPrompt =
-          '你是一个小学的数学老师，你将基于我给的的提示给出几道基础的计算题目。并以回车区分每一道题目';
+          '你是一个小学的数学老师，你将基于我给的的提示给出几道基础的计算题目。并以回车区分每一道题目。你只要返回结果，不需要任何额外的内容';
         break;
       }
     }
