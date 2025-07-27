@@ -73,12 +73,12 @@ export class AIService {
 
   async getPrompt(actId: string) {
     switch (actId) {
-      case '1': {
+      case 'aiwriter': {
         this.deepSeekClient.systemPrompt =
           '你非常擅长写作文，你将基于我听过的要求，包括作文主题，作文类型，语言类型，以及作文字数写一篇作文，给我参考';
         break;
       }
-      case 'caculate': {
+      case 'math': {
         this.deepSeekClient.systemPrompt =
           '你是一个小学的数学老师，你将基于我给的的提示给出几道基础的计算题目。并以回车区分每一道题目';
         break;
