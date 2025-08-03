@@ -113,13 +113,14 @@ export class ImageService {
    * @param stream
    * @returns
    */
-  async tiPdfToDocx(stream: Buffer) {
+  async tiPdfToDocx(stream: Buffer | string) {
     if (!stream) {
       throw new Error('stream_is_required');
     }
     const result = await axios.post(IMAGE_HANDLE_APIS.pdf_to_docx, stream, {
       headers: this.decorHeader({
-        'Content-Type': 'application/octet-stream',
+        'Content-Type':
+          stream instanceof Buffer ? 'application/octet-stream' : 'text/plain',
       }),
       responseType: 'json',
     });

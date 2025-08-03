@@ -123,9 +123,9 @@ export class FileController {
   @Post('/upload/:action')
   async uploadAndActionFile(@Files() files, @Fields() fields) {
     const action = this.ctx.params['action'] as TActionType;
-
-    const userId = fields.userId || this.ctx.get('x-user-id');
-    const data = readFileSync(join(files[0].data));
+    const userId = fields?.userId || this.ctx.get('x-user-id');
+    const fileUrl = fields?.file_url || this.ctx.request.body?.file_url;
+    const data = files ? readFileSync(join(files[0].data)) : null;
     switch (action) {
       case 'clear_hands_write': {
         const result = await this.imageService.eraserHandWriteImage(data);
@@ -163,14 +163,15 @@ export class FileController {
         const convertType = this.ctx.query['type'] || 'pdf2doc';
         const result = await this.fileService.convert({
           type: convertType,
-          file: join(files[0].data),
+          file: files ? join(files[0].data) : undefined,
+          fileUrl: fileUrl,
           userId,
         });
         await UserRecordModel.create({
           image_url_after: result,
           user_id: userId,
           image_url_before: '',
-          lane: fields.lane || 'whale',
+          lane: fields?.lane || this.ctx.request.body.lane || 'whale',
         });
         return { file: result };
       }

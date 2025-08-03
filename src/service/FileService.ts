@@ -31,6 +31,8 @@ export class FileService {
     file?: string;
     stream?: Buffer;
     userId: string;
+    // 文件的远程路径
+    fileUrl?: string;
   }) {
     switch (option.type) {
       case 'pdf2doc': {
@@ -43,10 +45,14 @@ export class FileService {
         return filename;
       }
       case 'pdf2doc_textin': {
-        let stream = option.stream;
+        let stream: Buffer | string = option.stream;
+        if (option.fileUrl) {
+          stream = option.fileUrl;
+        }
         if (!stream) {
           stream = readFileSync(join(option.file));
         }
+
         const uploadedDoc = await this.imageService.tiPdfToDocx(stream);
         const docFileName = `${option.userId}_${Date.now()}.docx`;
         if (!existsSync(join(this.outputDir, 'tmp'))) {
