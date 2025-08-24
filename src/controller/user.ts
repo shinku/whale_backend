@@ -138,4 +138,35 @@ export class user {
     }
     return await this.pointerService.modifyPoint(userId, point, action);
   }
+
+  @Get('/user')
+  async getUserBaseInfo() {
+    const { userId } = this.ctx;
+    const lane = this.ctx.lane || LANE.WHALE;
+    const record = await UserModel.findOne({
+      attributes: [
+        'openid',
+        'user_avator',
+        'user_mobile',
+        'user_name',
+        'lane',
+        'agree_first_deal',
+      ],
+      where: {
+        lane,
+        openid: userId,
+      },
+      raw: true,
+    });
+    if (!record) {
+      throw new Error('user_not_existed');
+    }
+    const amount = await this.pointerService.userInitialization(userId);
+    const vipInfo = await this.vipService.userVipInitializatin(userId);
+    return {
+      ...record,
+      ...vipInfo,
+      amount,
+    };
+  }
 }

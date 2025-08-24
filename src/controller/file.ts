@@ -123,7 +123,13 @@ export class FileController {
   @Post('/upload/:action')
   async uploadAndActionFile(@Files() files, @Fields() fields) {
     const action = this.ctx.params['action'] as TActionType;
-    const userId = fields?.userId || this.ctx.get('x-user-id');
+    const userId = this.ctx.get('x-user-id');
+    if (!userId) {
+      throw new Error('userId is required');
+    }
+    console.log({
+      userId,
+    });
     const fileUrl = fields?.file_url || this.ctx.request.body?.file_url;
     const data = files ? readFileSync(join(files[0].data)) : null;
     switch (action) {
