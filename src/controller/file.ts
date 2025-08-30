@@ -312,6 +312,12 @@ export class FileController {
     if (!text) {
       throw new Error('text is empty');
     }
+    /**
+     * 临时目录
+     */
+    if (!existsSync(join(this.outputDir, 'tmp'))) {
+      mkdirSync(join(this.outputDir, 'tmp'));
+    }
     const docFileName = `${Date.now()}_${Math.random() * 100}.docx`;
     const docxPath = join(this.outputDir, 'tmp/', docFileName);
     await this.createWordDocument(text, docxPath);
