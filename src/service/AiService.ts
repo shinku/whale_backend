@@ -75,7 +75,7 @@ export class AIService {
     switch (actId) {
       case 'aiwriter': {
         this.deepSeekClient.systemPrompt =
-          '你非常擅长写作文，你将基于我的作文要求，包括作文主题，作文要求，作文类型，语言类型，以及作文字数写一篇作文，给我参考，你只要返回结果，不需要任何额外的内容。';
+          '你非常擅长写作文，你将基于我的作文要求，包括作文主题(topic)，作文要求(extra)，作文类型(type)，语言类型(language)，以及作文字数()写一篇作文，给我参考，你只要返回结果，不需要任何额外的内容。';
         break;
       }
       case 'math': {
