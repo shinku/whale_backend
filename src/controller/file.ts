@@ -9,6 +9,7 @@ import {
   Provide,
 } from '@midwayjs/core';
 import axios from 'axios';
+import { Document, Packer, Paragraph, TextRun } from 'docx';
 import { Context } from 'egg';
 import {
   existsSync,
@@ -127,9 +128,6 @@ export class FileController {
     if (!userId) {
       throw new Error('userId is required');
     }
-    console.log({
-      userId,
-    });
     const fileUrl = fields?.file_url || this.ctx.request.body?.file_url;
     const data = files ? readFileSync(join(files[0].data)) : null;
     switch (action) {
@@ -308,4 +306,43 @@ export class FileController {
       override: 'false',
     });
   }*/
+  @Post('/text_2_word')
+  async text2Word() {
+    const text = this.ctx.request.body.text;
+    if (!text) {
+      throw new Error('text is empty');
+    }
+    const docFileName = `${Date.now()}_${Math.random() * 100}.docx`;
+    const docxPath = join(this.outputDir, 'tmp/', docFileName);
+    await this.createWordDocument(text, docxPath);
+    // 将doc文件上传到oss
+    await this.ossService.uploadFile({
+      filePath: docxPath,
+      fileName: docFileName,
+      forbidOverride: 'true',
+      folderName: 'pub/',
+    });
+    unlink(docxPath, (...params) => {
+      console.log('unlink pdf', params);
+    });
+    return 'pub/' + docFileName;
+  }
+
+  async createWordDocument(text: string, filePath: string) {
+    const doc = new Document({
+      sections: [
+        {
+          properties: {},
+          children: [
+            new Paragraph({
+              children: [new TextRun(text)],
+            }),
+          ],
+        },
+      ],
+    });
+
+    const buffer = await Packer.toBuffer(doc);
+    writeFileSync(filePath, buffer);
+  }
 }
