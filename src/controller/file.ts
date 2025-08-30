@@ -309,6 +309,7 @@ export class FileController {
   @Post('/text_2_word')
   async text2Word() {
     const text = this.ctx.request.body.text;
+    console.log('text', text);
     if (!text) {
       throw new Error('text is empty');
     }
@@ -339,11 +340,11 @@ export class FileController {
       sections: [
         {
           properties: {},
-          children: [
-            new Paragraph({
-              children: [new TextRun(text)],
-            }),
-          ],
+          children: ('\n\n\n\n' + text).split('\n').map(str => {
+            return new Paragraph({
+              children: [new TextRun(str)],
+            });
+          }),
         },
       ],
     });
