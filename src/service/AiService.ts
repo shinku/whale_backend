@@ -84,7 +84,7 @@ export class AIService {
         break;
       }
     }
-    // return this.deepSeekClient;
+    return this.deepSeekClient.systemPrompt;
   }
 
   async chatWithDeepSeek(prompt: string): Promise<string> {
