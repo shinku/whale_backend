@@ -48,7 +48,6 @@ export class Operator {
         },
       ],
     };
-    console.log({ whereOption });
     const count = await AppOperateModel.count({
       where: whereOption,
     });
@@ -61,7 +60,6 @@ export class Operator {
       offset: Number(offset),
       raw: true,
     });
-    console.log({ res });
     return {
       data: {
         count,

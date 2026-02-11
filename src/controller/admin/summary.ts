@@ -1,10 +1,10 @@
 import { Get, Inject, Provide } from '@midwayjs/core';
 import { Context } from 'egg';
 import { QueryTypes } from 'sequelize';
-import { UserModel } from '../model/UserModel';
-import Api from './api/Api';
+import { UserModel } from '../../model/UserModel';
+import { AdminApi } from '../api/Api';
 
-@Api('/summary')
+@AdminApi('/summary')
 @Provide()
 export class summary {
   @Inject()
