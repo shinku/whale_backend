@@ -15,16 +15,16 @@ export const switchPythonEnv = async (cmd: string) => {
 @Provide()
 export class FileService {
   @Config('outputDir')
-  outputDir: string;
+  outputDir!: string;
 
   @Config('appDir')
-  appDir: string;
+  appDir!: string;
 
   @Inject()
-  imageService: ImageService;
+  imageService!: ImageService;
 
   @Inject()
-  ossService: OssService;
+  ossService!: OssService;
 
   async convert(option: {
     type: 'pdf2doc' | 'pdf2doc_textin' | string;
@@ -36,6 +36,9 @@ export class FileService {
   }) {
     switch (option.type) {
       case 'pdf2doc': {
+        if(!option.file) {
+          throw new Error('file is required');
+        }
         const filename = `${option.userId}_${Date.now()}.docx`;
         if (!existsSync(join(this.outputDir, '/tmp'))) {
           mkdirSync(join(this.outputDir, '/tmp'));
@@ -45,12 +48,15 @@ export class FileService {
         return filename;
       }
       case 'pdf2doc_textin': {
-        let stream: Buffer | string = option.stream;
+        if(!option.file && !option.stream && !option.fileUrl) {
+          throw new Error('file or stream or fileUrl is required');
+        }
+        let stream: Buffer | string = option.stream as Buffer | string;
         if (option.fileUrl) {
           stream = option.fileUrl;
         }
         if (!stream) {
-          stream = readFileSync(join(option.file));
+          stream = readFileSync(join(option.file || ""));
         }
 
         const uploadedDoc = await this.imageService.tiPdfToDocx(stream);
@@ -75,7 +81,7 @@ export class FileService {
   }
 
   @Config('python')
-  pythonConfig: {
+  pythonConfig!: {
     bin: string;
   };
   /**
@@ -84,7 +90,7 @@ export class FileService {
    * @param docxPath
    * @returns
    */
-  async doPdfToWord(pdfPath, docxPath) {
+  async doPdfToWord(pdfPath: string, docxPath: string) {
     return new Promise((resolve, reject) => {
       // libreoffice --headless --convert-to docx ./test.pdf --outdir ./test.doc
       const pythonBin = this.pythonConfig?.bin || 'python';
@@ -99,7 +105,7 @@ export class FileService {
           const log = Buffer.from(data).toString();
           console.log(log + '\n');
         });
-        cli.stdout.on('end', data => {
+        cli.stdout.on('end', (data:string) => {
           resolve(data);
         });
         cli.stderr.on('data', data => {

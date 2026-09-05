@@ -7,10 +7,10 @@ import Api from './api/Api';
 @Api('/wx')
 export class Wx {
   @Inject()
-  ctx: Context;
+  ctx!: Context;
 
   @Inject()
-  wxService: WehchatApiService;
+  wxService!: WehchatApiService;
 
   @Post('/decrype_info')
   async descrypeInfo() {

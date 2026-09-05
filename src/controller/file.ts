@@ -33,7 +33,7 @@ export type TActionType =
   | 'qa'
   | 'pic_to_pdf';
 
-export function base64ToImage(base64String, outputFilePath) {
+export function base64ToImage(base64String: string, outputFilePath: string) {
   // 移除Base64编码的前缀（如：data:image/png;base64,）
   const base64Data = base64String.replace(/^data:\w+;base64,/, '');
 
@@ -77,13 +77,13 @@ export function base64ToStream(base64String: string) {
 @Provide()
 export class FileController {
   @Inject()
-  ctx: Context;
+  ctx!: Context;
 
   @Inject()
-  imageService: ImageService;
+  imageService!: ImageService;
 
   @Inject()
-  fileService: FileService;
+  fileService!: FileService;
   @Get('/get/:bucketname/:filename')
   async accessFile(
     @Param('filename') filename: string,
@@ -96,13 +96,13 @@ export class FileController {
   }
 
   @Config('outputDir')
-  outputDir: string;
+  outputDir!: string;
 
   @Inject()
-  ossService: OssService;
+  ossService!: OssService;
 
   @Post('/upload')
-  async uploadFile(@Files() files, @Fields() fields) {
+  async uploadFile(@Files() files: any[], @Fields() fields: any) {
     console.log({
       fields,
     });
@@ -122,7 +122,7 @@ export class FileController {
   }
 
   @Post('/upload/:action')
-  async uploadAndActionFile(@Files() files, @Fields() fields) {
+  async uploadAndActionFile(@Files() files: any[], @Fields() fields: Record<string, any>) {
     const action = this.ctx.params['action'] as TActionType;
     const userId = this.ctx.get('x-user-id');
     if (!userId) {
@@ -130,6 +130,9 @@ export class FileController {
     }
     const fileUrl = fields?.file_url || this.ctx.request.body?.file_url;
     const data = files ? readFileSync(join(files[0].data)) : null;
+    if(!data || !fileUrl) {
+      throw new Error('file is required');
+    }
     switch (action) {
       case 'clear_hands_write': {
         const result = await this.imageService.eraserHandWriteImage(data);
@@ -211,7 +214,7 @@ export class FileController {
     };
   }
 
-  async getQa(file: Buffer, fields) {
+  async getQa(file: Buffer, fields: Record<string, any>) {
     const { text = '这道题目怎么解' } = fields;
     const requestUrl = 'https://token.market.alicloudapi.com/qSlove';
     const base64 = file.toString('base64');

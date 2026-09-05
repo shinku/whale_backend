@@ -12,16 +12,16 @@ import Api from './api/Api';
 @Provide()
 export class user {
   @Inject()
-  ctx: Context;
+  ctx!: Context;
 
   @Inject()
-  wechatService: WehchatApiService;
+  wechatService!: WehchatApiService;
 
   @Inject()
-  pointerService: PointService;
+  pointerService!: PointService;
 
   @Inject()
-  vipService: VipService;
+  vipService!: VipService;
 
   @Get('/user/:token')
   async getUserInfo() {

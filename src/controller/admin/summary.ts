@@ -8,7 +8,7 @@ import { AdminApi } from '../api/Api';
 @Provide()
 export class summary {
   @Inject()
-  ctx: Context;
+  ctx!: Context;
 
   @Get('/users_record')
   async userRecord() {

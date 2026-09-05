@@ -42,7 +42,7 @@ export const IMAGE_HANDLE_APIS = {
 @Provide()
 export class ImageService {
   @Config('textin')
-  config: {
+  config!: {
     'x-ti-app-id': string;
     'x-ti-secret-code': string;
   };
@@ -72,10 +72,10 @@ export class ImageService {
   }
 
   @Inject()
-  ossService: OssService;
+  ossService!: OssService;
 
   @Config('outputDir')
-  outputDir: string;
+  outputDir!: string;
 
   async tiImageToPdf(files: string[]) {
     // 读取文件，并转换为base64

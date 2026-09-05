@@ -6,10 +6,10 @@ import Api from './Api';
 @Provide()
 export class Convert {
   @Inject()
-  ctx: Context;
+  ctx!: Context;
 
   @Config('outputDir')
-  outputDir: string;
+  outputDir!: string;
   //清除手写图片
   @Post('/clear_hand_write')
   async clearHandWrite() {

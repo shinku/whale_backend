@@ -9,29 +9,29 @@ export class UserRecordModel extends Model {
     primaryKey: true,
     autoIncrement: true,
   })
-  id: number;
+  id!: number;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  user_id: string;
+  user_id!: string;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  lane: string;
+  lane!: string;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  image_url_before: string;
+  image_url_before!: string;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  image_url_after: string;
+  image_url_after!: string;
 }

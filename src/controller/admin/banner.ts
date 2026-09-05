@@ -7,7 +7,7 @@ import { AdminApi } from '../api/Api';
 @Provide()
 export class BannerController {
   @Inject()
-  ctx: Context;
+  ctx!: Context;
 
   /**
    * 获取banner数据

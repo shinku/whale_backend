@@ -6,7 +6,7 @@ import Api from './api/Api';
 @Provide()
 export class OperateController {
   @Inject()
-  ctx: Context;
+  ctx!: Context;
 
   @Post('/leaveMessage')
   async leaveMessage() {

@@ -5,7 +5,7 @@ class DeepSeekClient {
   config: {
     appId: string;
   };
-  systemPrompt: string;
+  systemPrompt!: string;
   constructor(option: { appId: string }) {
     this.config = {
       appId: option.appId,
@@ -58,11 +58,11 @@ class DeepSeekClient {
 @Provide()
 export class AIService {
   @Config('deepseek')
-  config: {
+  config!: {
     appId: string;
   };
 
-  deepSeekClient: DeepSeekClient;
+  deepSeekClient!: DeepSeekClient;
 
   @Init()
   init() {
@@ -71,23 +71,13 @@ export class AIService {
     });
   }
 
-  async getPrompt(actId: string) {
-    switch (actId) {
-      case 'aiwriter': {
-        this.deepSeekClient.systemPrompt =
-          '你非常擅长写作文，你将基于我的作文要求，包括作文主题(topic)，作文要求(extra)，作文类型(type)，语言类型(language)，以及作文字数()写一篇作文，给我参考，你只要返回结果，不需要任何额外的内容。';
-        break;
-      }
-      case 'math': {
-        this.deepSeekClient.systemPrompt =
-          '你是一个小学的数学老师，你将基于我给的的提示给出几道基础的计算题目。并以回车区分每一道题目。你只要返回结果，不需要任何额外的内容。';
-        break;
-      }
+  async chatWithDeepSeek(
+    prompt: string,
+    systemPrompt?: string
+  ): Promise<string> {
+    if (systemPrompt) {
+      this.deepSeekClient.systemPrompt = systemPrompt;
     }
-    return this.deepSeekClient.systemPrompt;
-  }
-
-  async chatWithDeepSeek(prompt: string): Promise<string> {
     return this.deepSeekClient.chatCompletion({
       chat: prompt,
     });

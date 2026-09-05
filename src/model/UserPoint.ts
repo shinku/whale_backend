@@ -9,17 +9,17 @@ export class UserPointModel extends Model {
     primaryKey: true,
     autoIncrement: true,
   })
-  id: number;
+  id!: number;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  user_id: string;
+  user_id!: string;
 
   @Column({
     type: DataType.INTEGER,
     allowNull: true,
   })
-  amount: number;
+  amount!: number;
 }

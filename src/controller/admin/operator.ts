@@ -21,7 +21,7 @@ const moment = require('moment');
 @Provide()
 export class Operator {
   @Inject()
-  ctx: Context;
+  ctx!: Context;
 
   @Get('/')
   /**

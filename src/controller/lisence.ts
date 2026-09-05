@@ -5,7 +5,7 @@ import Api from './api/Api';
 @Provide()
 export class LisenceController {
   @Config('textin')
-  textinConfig: {
+  textinConfig!: {
     'x-ti-app-id': string;
     'x-ti-secret-code': string;
   };

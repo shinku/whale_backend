@@ -9,32 +9,32 @@ export class UserVipModel extends Model {
     primaryKey: true,
     autoIncrement: true,
   })
-  id: number;
+  id!: number;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  user_id: string;
+  user_id!: string;
 
   @Column({
     type: DataType.STRING,
     comment: 'guest|vip|svip',
     allowNull: false,
   })
-  type: string;
+  type!: string;
 
   @Column({
     type: DataType.DATE,
     allowNull: false,
     comment: '会员生效时间',
   })
-  available_start: number;
+  available_start!: number;
 
   @Column({
     type: DataType.DATE,
     allowNull: true,
     comment: '会员结束时间',
   })
-  available_end: number;
+  available_end!: number;
 }

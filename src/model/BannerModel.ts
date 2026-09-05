@@ -16,14 +16,14 @@ export class BannerModel extends Model {
     primaryKey: true,
     autoIncrement: true,
   })
-  id: number;
+  id!: number;
 
   @Default('whale')
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  lane: string;
+  lane!: string;
 
   @Index
   @Column({
@@ -31,21 +31,21 @@ export class BannerModel extends Model {
     comment: 'active/deactive',
     allowNull: false,
   })
-  status: string;
+  status!: string;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
     comment: '跳转链接',
   })
-  action: string;
+  action!: string;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
     comment: 'banner name',
   })
-  name: string;
+  name!: string;
 
   @Index
   @Default('normal')
@@ -54,12 +54,12 @@ export class BannerModel extends Model {
     allowNull: false,
     comment: 'banner type : normal/icon',
   })
-  type: string;
+  type!: string;
 
   @Column({
     type: DataType.STRING,
     comment: 'banner image',
     allowNull: false,
   })
-  banner_image: string;
+  banner_image!: string;
 }

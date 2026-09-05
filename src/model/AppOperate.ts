@@ -10,24 +10,24 @@ export class AppOperateModel extends Model {
     primaryKey: true,
     autoIncrement: true,
   })
-  id: number;
+  id!: number;
 
   @Column({
     type: DataType.STRING,
   })
-  operator_id: string;
+  operator_id!: string;
 
   @Column({
     type: DataType.STRING,
     comment: '活动icon',
   })
-  icon: string;
+  icon!: string;
 
   @Column({
     type: DataType.STRING,
     comment: '运营活动名称',
   })
-  name: string;
+  name!: string;
 
   @Default('webview')
   @Column({
@@ -35,30 +35,30 @@ export class AppOperateModel extends Model {
     comment: 'page/webview/miniapp',
     allowNull: false,
   })
-  type: string;
+  type!: string;
 
   @Column({
     type: DataType.JSON,
     allowNull: false,
   })
-  config: object;
+  config!: object;
 
   @Column({
     type: DataType.DATE,
     allowNull: false,
   })
-  available_start: number;
+  available_start!: number;
 
   @Column({
     type: DataType.DATE,
     allowNull: true,
   })
-  available_end: number;
+  available_end!: number;
 
   @Default('whale')
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  lane: string;
+  lane!: string;
 }

@@ -9,29 +9,29 @@ export class AppModel extends Model {
     primaryKey: true,
     autoIncrement: true,
   })
-  id: number;
+  id!: number;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  app_id: string;
+  app_id!: string;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  app_secret: string;
+  app_secret!: string;
 
   @Column({
     type: DataType.STRING,
     allowNull: true,
   })
-  app_name: string;
+  app_name!: string;
 
   @Column({
     type: DataType.STRING,
     allowNull: true,
   })
-  lane: string;
+  lane!: string;
 }

@@ -8,7 +8,7 @@ export const APIS = {
 @Provide()
 export class WehchatApiService {
   @Config('weixinMiniProgram')
-  config: {
+  config!: {
     appid: string;
     appsecret: string;
   };

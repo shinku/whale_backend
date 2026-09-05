@@ -18,7 +18,7 @@ export interface IUploadOption {
   stream?: Stream | Buffer;
 }
 
-export const genUploadHeader = ({ forbidOverride, filename }) => {
+export const genUploadHeader = ({ forbidOverride, filename }: { forbidOverride?: 'true' | 'false'; filename: string }) => {
   return {
     // 指定Object的存储类型。
     'x-oss-storage-class': 'Standard',
@@ -34,14 +34,16 @@ export const genUploadHeader = ({ forbidOverride, filename }) => {
 @Provide()
 export class OssService {
   @Config('ali')
-  config: IOssConfig;
+  config!: IOssConfig;
 
-  client: OSS;
+  client!: OSS;
 
   mainDomain = 'https://fms.whalepea.com';
 
   @Init()
   async init() {
+
+    // @ts-ignore
     this.client = OSS({
       region: this.config.bucket.region,
       // 从环境变量中获取访问凭证。运行本代码示例之前，请确保已设置环境变量OSS_ACCESS_KEY_ID和OSS_ACCESS_KEY_SECRET。
@@ -58,9 +60,9 @@ export class OssService {
   async uploadFile(option: IUploadOption) {
     const headers = genUploadHeader({
       forbidOverride: option.forbidOverride,
-      filename: option.fileName,
+      filename: option.fileName || "",
     });
-    const filePath = path.normalize(option.filePath);
+    const filePath = path.normalize(option.filePath || '');
     const result = await this.client
       .put(`${option.folderName || ''}${option.fileName}`, filePath, {
         headers,
@@ -90,15 +92,15 @@ export class OssService {
   async uploadStream(option: IUploadOption) {
     const headers = genUploadHeader({
       forbidOverride: option.forbidOverride,
-      filename: option.fileName,
-    });
+      filename: option.fileName || "",
+    }) as any;
     return await this.client
       .putStream(
         `${option.folderName || ''}${option.fileName}`,
         option.stream,
         {
           headers,
-        }
+        } as any
       )
       .catch(e => {
         console.log(e);

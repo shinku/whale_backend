@@ -7,7 +7,7 @@ import { AdminApi } from '../api/Api';
 @Provide()
 export class UserController {
   @Inject()
-  ctx: Context;
+  ctx!: Context;
 
   @Get('/')
   async getUsers() {

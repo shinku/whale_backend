@@ -9,25 +9,25 @@ export class UserFeedBack extends Model {
     primaryKey: true,
     autoIncrement: true,
   })
-  id: number;
+  id!: number;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  user_id: string;
+  user_id!: string;
 
   @Column({
     type: DataType.STRING,
     allowNull: false,
   })
-  message: string;
+  message!: string;
 
   @Column({
     type: DataType.STRING,
     allowNull: true,
   })
-  feedback_img: string;
+  feedback_img!: string;
 
   @Default('whale')
   @Column({
@@ -35,5 +35,5 @@ export class UserFeedBack extends Model {
     allowNull: false,
     comment: '反馈渠道',
   })
-  lane: string;
+  lane!: string;
 }
