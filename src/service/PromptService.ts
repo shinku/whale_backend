@@ -14,6 +14,9 @@ export class PromptService {
   }
 
   async getPrompt(actName: string) {
+    if (actName === 'README') {
+      throw new Error(`prompt file not found: ${actName}.md`);
+    }
     const promptFile = this.getPromptDirs()
       .map(dir => join(dir, `${actName}.md`))
       .find(filePath => existsSync(filePath));
@@ -31,7 +34,7 @@ export class PromptService {
         continue;
       }
       for (const file of readdirSync(dir)) {
-        if (file.endsWith('.md')) {
+        if (file.endsWith('.md') && file !== 'README.md') {
           actIds.add(file.slice(0, -3));
         }
       }

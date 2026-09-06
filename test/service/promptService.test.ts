@@ -33,6 +33,7 @@ describe('test/service/promptService.test.ts', () => {
     expect(activities).toContain('math');
     expect(activities).toContain('vertical_calc');
     expect(activities).toContain('word_practice');
+    expect(activities).not.toContain('README');
   });
 
   it('should load the word practice prompt from the md file', async () => {
@@ -47,6 +48,15 @@ describe('test/service/promptService.test.ts', () => {
     expect(prompt).toContain('中译英');
     expect(prompt).toContain('单元');
     expect(prompt).toContain('默认 15');
-    expect(prompt).toContain('不要输出答案');
+    expect(prompt).toContain('isCorrect');
+    expect(prompt).toContain('"options"');
+    expect(prompt).toContain('phonetic');
+    expect(prompt).toContain('ˈ');
+  });
+
+  it('should not expose README as an activity prompt', async () => {
+    await expect(promptService.getPrompt('README')).rejects.toThrow(
+      'prompt file not found: README.md'
+    );
   });
 });
