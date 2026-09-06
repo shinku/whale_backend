@@ -1,10 +1,10 @@
 import { Middleware } from '@midwayjs/core';
-import { IMiddleware } from 'egg';
+import { IMiddleware,Context } from 'egg';
 
 @Middleware()
 export class AllMiddleware implements IMiddleware {
   resolve() {
-    return async (ctx, next) => {
+    return async (ctx: Context<any>, next: () => Promise<any>) => {
       ctx.set('Content-Type', 'application/json; charset=utf-8');
       try {
         const result = await next();
@@ -19,7 +19,7 @@ export class AllMiddleware implements IMiddleware {
             data: result,
           });
         }
-      } catch (e) {
+      } catch (e: any) {
         if (ctx.status === 404) {
           ctx.status = 500;
           ctx.body = {

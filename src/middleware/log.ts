@@ -4,7 +4,7 @@ import { IMiddleware } from 'egg';
 @Middleware()
 export class LogMiddleware implements IMiddleware {
   resolve() {
-    return async (ctx, next) => {
+    return async (ctx: any, next: () => Promise<any> ) => {
       const start = Date.now();
       await next();
       const ms = Date.now() - start;

@@ -27,6 +27,10 @@ import {
   FILE_TEXT_2_WORD_COUNT_LIMIT,
   FILE_UPLOAD_ACTION_COUNT_LIMIT,
 } from '../core/limits';
+import { ClearHandsWriteLimitMiddleware } from '../middleware/clearHandsWriteLimit';
+import { ConvertFileLimitMiddleware } from '../middleware/convertFileLimit';
+import { Expend2FileLimitMiddleware } from '../middleware/expend2FileLimit';
+import { Text2WordLimitMiddleware } from '../middleware/text2WordLimit';
 import { UserRecordModel } from '../model/UserRecord';
 import { FileService } from '../service/FileService';
 import { ImageService } from '../service/ImageService';
@@ -132,12 +136,31 @@ export class FileController {
     }
   }
 
-  @Post('/upload/:action')
-  async uploadAndActionFile(
+  @Post('/upload/clear_hands_write', {
+    middleware: [ClearHandsWriteLimitMiddleware],
+  })
+  async clearHandsWrite(
     @Files() files: any[],
     @Fields() fields: Record<string, any>
   ) {
-    const action = this.ctx.params['action'] as TActionType;
+    return this.uploadAndActionFile(files, fields, 'clear_hands_write');
+  }
+
+  @Post('/upload/convert_file', {
+    middleware: [ConvertFileLimitMiddleware],
+  })
+  async convertFile(
+    @Files() files: any[],
+    @Fields() fields: Record<string, any>
+  ) {
+    return this.uploadAndActionFile(files, fields, 'convert_file');
+  }
+
+  private async uploadAndActionFile(
+    files: any[] | undefined,
+    fields: Record<string, any>,
+    action: 'clear_hands_write' | 'convert_file'
+  ) {
     const userId = this.ctx.get('x-user-id');
     if (!userId) {
       throw new Error('userId is required');
@@ -147,14 +170,6 @@ export class FileController {
     const data = files ? readFileSync(join(files[0].data)) : null;
     if (!data || !fileUrl) {
       throw new Error('file is required');
-    }
-    const countLimitField = FILE_UPLOAD_ACTION_COUNT_LIMIT[action];
-    if (countLimitField) {
-      await this.userService.assertCountLimitAvailable(
-        userId,
-        lane,
-        countLimitField
-      );
     }
     switch (action) {
       case 'clear_hands_write': {
@@ -187,7 +202,7 @@ export class FileController {
         await this.userService.consumeCountLimit(
           userId,
           lane,
-          countLimitField!
+          FILE_UPLOAD_ACTION_COUNT_LIMIT.clear_hands_write
         );
         return {
           file: 'pub/' + filename,
@@ -211,12 +226,9 @@ export class FileController {
         await this.userService.consumeCountLimit(
           userId,
           lane,
-          countLimitField!
+          FILE_UPLOAD_ACTION_COUNT_LIMIT.convert_file
         );
         return { file: result };
-      }
-      case 'qa': {
-        // return await this.getQa(data, fields);
       }
     }
   }
@@ -275,7 +287,9 @@ export class FileController {
    *  "file_urls": ["",""]
    * }
    */
-  @Post('/expend_2_file')
+  @Post('/expend_2_file', {
+    middleware: [Expend2FileLimitMiddleware],
+  })
   async doExpend2File() {
     /**
      * 基于request的file_urls参数
@@ -293,11 +307,6 @@ export class FileController {
     if (!['pdf', 'docx'].includes(to_type)) {
       throw new Error('to_type is not support');
     }
-    await this.userService.assertCountLimitAvailable(
-      userId,
-      lane,
-      FILE_EXPEND_2_FILE_COUNT_LIMIT
-    );
     switch (to_type) {
       case 'pdf': {
         const stream = await this.imageService.tiImageToPdf(fileUrls);
@@ -362,7 +371,9 @@ export class FileController {
       override: 'false',
     });
   }*/
-  @Post('/text_2_word')
+  @Post('/text_2_word', {
+    middleware: [Text2WordLimitMiddleware],
+  })
   async text2Word() {
     const userId = this.ctx.get('x-user-id');
     if (!userId) {
@@ -374,11 +385,6 @@ export class FileController {
     if (!text) {
       throw new Error('text is empty');
     }
-    await this.userService.assertCountLimitAvailable(
-      userId,
-      lane,
-      FILE_TEXT_2_WORD_COUNT_LIMIT
-    );
     /**
      * 临时目录
      */
