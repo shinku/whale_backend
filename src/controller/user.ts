@@ -112,10 +112,10 @@ export class user {
       throw new Error('deal_is_not_accepted');
     }
     const agreeFirstDeal = {
-      agree: 1,
-      reject: 0,
+      agree: true,
+      reject: false,
     };
-    record.agree_first_deal = agreeFirstDeal[deal];
+    record.agree_first_deal = agreeFirstDeal[deal as keyof typeof agreeFirstDeal] ;
     await record.save();
     return 'done';
   }

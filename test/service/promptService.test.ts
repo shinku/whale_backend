@@ -32,5 +32,21 @@ describe('test/service/promptService.test.ts', () => {
     expect(activities).toContain('idiom_practice');
     expect(activities).toContain('math');
     expect(activities).toContain('vertical_calc');
+    expect(activities).toContain('word_practice');
+  });
+
+  it('should load the word practice prompt from the md file', async () => {
+    const prompt = await promptService.getPrompt('word_practice');
+
+    expect(prompt).toContain('人教PEP');
+    expect(prompt).toContain('外研社');
+    expect(prompt).toContain('北师大');
+    expect(prompt).toContain('一年级');
+    expect(prompt).toContain('初三');
+    expect(prompt).toContain('英译中');
+    expect(prompt).toContain('中译英');
+    expect(prompt).toContain('单元');
+    expect(prompt).toContain('默认 15');
+    expect(prompt).toContain('不要输出答案');
   });
 });

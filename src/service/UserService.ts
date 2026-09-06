@@ -1,4 +1,4 @@
-import { Provide } from '@midwayjs/core';
+import { Provide, Scope, ScopeEnum } from '@midwayjs/core';
 import { Op, Sequelize } from 'sequelize';
 import { LANE } from '../core/enums';
 import {
@@ -14,6 +14,7 @@ import { UserModel } from '../model/UserModel';
 export type TUserCountLimitMap = Record<TUserCountLimitField, number>;
 
 @Provide()
+@Scope(ScopeEnum.Request, { allowDowngrade: true })
 export class UserService {
   async getUser(options: IUserOptions) {
     return {
