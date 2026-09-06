@@ -29,6 +29,7 @@ describe('test/service/promptService.test.ts', () => {
     const activities = await promptService.getPromptList();
 
     expect(activities).toContain('aiwriter');
+    expect(activities).toContain('idiom_practice');
     expect(activities).toContain('math');
     expect(activities).toContain('vertical_calc');
   });

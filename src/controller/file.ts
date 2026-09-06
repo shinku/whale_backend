@@ -21,10 +21,17 @@ import {
 } from 'fs';
 import { join } from 'path';
 import { PassThrough, Stream } from 'stream';
+import { LANE } from '../core/enums';
+import {
+  FILE_EXPEND_2_FILE_COUNT_LIMIT,
+  FILE_TEXT_2_WORD_COUNT_LIMIT,
+  FILE_UPLOAD_ACTION_COUNT_LIMIT,
+} from '../core/limits';
 import { UserRecordModel } from '../model/UserRecord';
 import { FileService } from '../service/FileService';
 import { ImageService } from '../service/ImageService';
 import { OssService } from '../service/OssService';
+import { UserService } from '../service/user';
 import Api from './api/Api';
 
 export type TActionType =
@@ -84,6 +91,10 @@ export class FileController {
 
   @Inject()
   fileService!: FileService;
+
+  @Inject()
+  userService!: UserService;
+
   @Get('/get/:bucketname/:filename')
   async accessFile(
     @Param('filename') filename: string,
@@ -122,21 +133,33 @@ export class FileController {
   }
 
   @Post('/upload/:action')
-  async uploadAndActionFile(@Files() files: any[], @Fields() fields: Record<string, any>) {
+  async uploadAndActionFile(
+    @Files() files: any[],
+    @Fields() fields: Record<string, any>
+  ) {
     const action = this.ctx.params['action'] as TActionType;
     const userId = this.ctx.get('x-user-id');
     if (!userId) {
       throw new Error('userId is required');
     }
+    const lane = fields?.lane || this.ctx.request.body?.lane || LANE.WHALE;
     const fileUrl = fields?.file_url || this.ctx.request.body?.file_url;
     const data = files ? readFileSync(join(files[0].data)) : null;
-    if(!data || !fileUrl) {
+    if (!data || !fileUrl) {
       throw new Error('file is required');
+    }
+    const countLimitField = FILE_UPLOAD_ACTION_COUNT_LIMIT[action];
+    if (countLimitField) {
+      await this.userService.assertCountLimitAvailable(
+        userId,
+        lane,
+        countLimitField
+      );
     }
     switch (action) {
       case 'clear_hands_write': {
         const result = await this.imageService.eraserHandWriteImage(data);
-        const filename = fields.userId + Math.random() * 100 + 'after.jpg';
+        const filename = userId + Math.random() * 100 + 'after.jpg';
         if (result.data.code === 40003) {
           return {
             code: 40003,
@@ -156,11 +179,16 @@ export class FileController {
             image_url_after: 'pub/' + filename,
             user_id: userId,
             image_url_before: '',
-            lane: fields.lane || 'whale',
+            lane,
           });
         } catch (e) {
           console.log(e);
         }
+        await this.userService.consumeCountLimit(
+          userId,
+          lane,
+          countLimitField!
+        );
         return {
           file: 'pub/' + filename,
         };
@@ -178,8 +206,13 @@ export class FileController {
           image_url_after: result,
           user_id: userId,
           image_url_before: '',
-          lane: fields?.lane || this.ctx.request.body.lane || 'whale',
+          lane,
         });
+        await this.userService.consumeCountLimit(
+          userId,
+          lane,
+          countLimitField!
+        );
         return { file: result };
       }
       case 'qa': {
@@ -247,6 +280,11 @@ export class FileController {
     /**
      * 基于request的file_urls参数
      */
+    const userId = this.ctx.get('x-user-id');
+    if (!userId) {
+      throw new Error('userId is required');
+    }
+    const lane = this.ctx.request.body?.lane || LANE.WHALE;
     const fileUrls = this.ctx.request.body.file_urls;
     const to_type = this.ctx.request.body.to_type || 'pdf';
     if (!fileUrls || fileUrls.length === 0) {
@@ -255,6 +293,11 @@ export class FileController {
     if (!['pdf', 'docx'].includes(to_type)) {
       throw new Error('to_type is not support');
     }
+    await this.userService.assertCountLimitAvailable(
+      userId,
+      lane,
+      FILE_EXPEND_2_FILE_COUNT_LIMIT
+    );
     switch (to_type) {
       case 'pdf': {
         const stream = await this.imageService.tiImageToPdf(fileUrls);
@@ -264,6 +307,11 @@ export class FileController {
           fileName: fileName,
           forbidOverride: 'true',
         });
+        await this.userService.consumeCountLimit(
+          userId,
+          lane,
+          FILE_EXPEND_2_FILE_COUNT_LIMIT
+        );
         return fileName;
       }
       case 'docx': {
@@ -290,6 +338,11 @@ export class FileController {
         unlink(docxPath, (...params) => {
           console.log('unlink pdf', params);
         });
+        await this.userService.consumeCountLimit(
+          userId,
+          lane,
+          FILE_EXPEND_2_FILE_COUNT_LIMIT
+        );
         return 'pub/' + docFileName;
         //return result;
       }
@@ -311,11 +364,21 @@ export class FileController {
   }*/
   @Post('/text_2_word')
   async text2Word() {
+    const userId = this.ctx.get('x-user-id');
+    if (!userId) {
+      throw new Error('userId is required');
+    }
+    const lane = this.ctx.request.body?.lane || LANE.WHALE;
     const text = this.ctx.request.body.text;
     console.log('text', text);
     if (!text) {
       throw new Error('text is empty');
     }
+    await this.userService.assertCountLimitAvailable(
+      userId,
+      lane,
+      FILE_TEXT_2_WORD_COUNT_LIMIT
+    );
     /**
      * 临时目录
      */
@@ -335,6 +398,11 @@ export class FileController {
     unlink(docxPath, (...params) => {
       console.log('unlink pdf', params);
     });
+    await this.userService.consumeCountLimit(
+      userId,
+      lane,
+      FILE_TEXT_2_WORD_COUNT_LIMIT
+    );
     return 'pub/' + docFileName;
   }
 

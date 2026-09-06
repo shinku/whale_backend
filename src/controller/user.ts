@@ -4,6 +4,7 @@ import { LANE } from '../core/enums';
 import { UserFeedBack } from '../model/UserFeedBack';
 import { UserModel } from '../model/UserModel';
 import { PointService } from '../service/PointService';
+import { UserService } from '../service/user';
 import { VipService } from '../service/VipService';
 import { WehchatApiService } from '../service/WechatApiService';
 import Api from './api/Api';
@@ -23,6 +24,9 @@ export class user {
   @Inject()
   vipService!: VipService;
 
+  @Inject()
+  userService!: UserService;
+
   @Get('/user/:token')
   async getUserInfo() {
     const lane = this.ctx.lane || LANE.WHALE;
@@ -31,7 +35,7 @@ export class user {
     // 通过微信api获取基本信息
     const baseInfo = await this.wechatService.getBaseUserInfo(token);
     const { openid, session_key } = baseInfo;
-    const [record] = await UserModel.findOrCreate<UserModel>({
+    const [record, created] = await UserModel.findOrCreate<UserModel>({
       attributes: [
         'openid',
         'user_avator',
@@ -39,6 +43,11 @@ export class user {
         'user_name',
         'lane',
         'agree_first_deal',
+        'count_clear_hands_write_limit',
+        'count_convert_file_limit',
+        'count_expend_2_file_limit',
+        'count_text_2_word_limit',
+        'time_limit',
       ],
       where: {
         lane,
@@ -49,12 +58,19 @@ export class user {
     });
     const amount = await this.pointerService.userInitialization(openid);
     const vipInfo = await this.vipService.userVipInitializatin(openid);
+    // 新用户 / 历史空字段用户初始化 countlimit 剩余次数
+    const countLimitInfo = await this.userService.initializeUserCountLimits(
+      openid,
+      lane,
+      created
+    );
     // 判断当前用户是否有积分记录，如果没有，则表示第一次注册，会根据一定规则赠送部分积分
     return {
       data: {
         ...record,
         ...vipInfo,
         amount,
+        ...countLimitInfo,
         session_key,
       },
     };
@@ -151,6 +167,11 @@ export class user {
         'user_name',
         'lane',
         'agree_first_deal',
+        'count_clear_hands_write_limit',
+        'count_convert_file_limit',
+        'count_expend_2_file_limit',
+        'count_text_2_word_limit',
+        'time_limit',
       ],
       where: {
         lane,
@@ -163,10 +184,15 @@ export class user {
     }
     const amount = await this.pointerService.userInitialization(userId);
     const vipInfo = await this.vipService.userVipInitializatin(userId);
+    const countLimitInfo = await this.userService.initializeUserCountLimits(
+      userId,
+      lane
+    );
     return {
       ...record,
       ...vipInfo,
       amount,
+      ...countLimitInfo,
     };
   }
 }
