@@ -4,7 +4,8 @@
 export const DEFAULT_USER_COUNT_LIMIT = 10;
 
 /**
- * lisence_type = countlimit 时，user 表中需要初始化的次数限制字段
+ * lisence_type = countlimit 时，
+ * user_limit_table.limit_type 中需要初始化的次数限制类型
  */
 export const USER_COUNT_LIMIT_FIELDS = [
   'count_clear_hands_write_limit',
@@ -16,9 +17,9 @@ export const USER_COUNT_LIMIT_FIELDS = [
 export type TUserCountLimitField = (typeof USER_COUNT_LIMIT_FIELDS)[number];
 
 /**
- * 时间限制字段，暂时只做预留，策略为空
+ * 时间限制类型：limit_type = time_date 时，使用 limit_date 记录过期时间
  */
-export const USER_TIME_LIMIT_FIELD = 'time_limit';
+export const USER_TIME_DATE_LIMIT_TYPE = 'time_date';
 
 /**
  * /api/file/upload/:action 中 action 对应的次数限制字段

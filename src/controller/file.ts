@@ -35,7 +35,7 @@ import { UserRecordModel } from '../model/UserRecord';
 import { FileService } from '../service/FileService';
 import { ImageService } from '../service/ImageService';
 import { OssService } from '../service/OssService';
-import { UserService } from '../service/user';
+import { UserService } from '../service/UserService';
 import Api from './api/Api';
 
 export type TActionType =

@@ -1,7 +1,7 @@
 import { Context } from 'egg';
 import { LANE } from '../core/enums';
 import { TUserCountLimitField } from '../core/limits';
-import { UserService } from '../service/user';
+import { UserService } from '../service/UserService';
 
 /**
  * countlimit 预检查的公共逻辑，由各个 POST 的独立中间件调用

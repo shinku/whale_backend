@@ -4,7 +4,7 @@ import { LANE } from '../core/enums';
 import { UserFeedBack } from '../model/UserFeedBack';
 import { UserModel } from '../model/UserModel';
 import { PointService } from '../service/PointService';
-import { UserService } from '../service/user';
+import { UserService } from '../service/UserService';
 import { VipService } from '../service/VipService';
 import { WehchatApiService } from '../service/WechatApiService';
 import Api from './api/Api';
@@ -43,11 +43,6 @@ export class user {
         'user_name',
         'lane',
         'agree_first_deal',
-        'count_clear_hands_write_limit',
-        'count_convert_file_limit',
-        'count_expend_2_file_limit',
-        'count_text_2_word_limit',
-        'time_limit',
       ],
       where: {
         lane,
@@ -167,11 +162,6 @@ export class user {
         'user_name',
         'lane',
         'agree_first_deal',
-        'count_clear_hands_write_limit',
-        'count_convert_file_limit',
-        'count_expend_2_file_limit',
-        'count_text_2_word_limit',
-        'time_limit',
       ],
       where: {
         lane,
