@@ -14,3 +14,4 @@ run/
 output
 config.local.ts
 */config/config.json
+.env

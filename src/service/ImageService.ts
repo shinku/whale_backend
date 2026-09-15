@@ -27,7 +27,7 @@ const TI_CODE_MAP = {
  * @returns
  */
 export const getCodeMessage = (code: string) => {
-  return TI_CODE_MAP[code] || '';
+  return  TI_CODE_MAP[code as keyof typeof TI_CODE_MAP] || '';
 };
 
 export const IMAGE_HANDLE_APIS = {
@@ -38,6 +38,94 @@ export const IMAGE_HANDLE_APIS = {
   img_to_pdf: 'https://api.textin.com/ai/service/v1/file-convert/image-to-pdf',
   pdf_to_docx: 'https://api.textin.com/ai/service/v1/file-convert/pdf-to-word',
 };
+
+export const TEXTIN_USER_APIS = {
+  /**
+   * 账户余额
+   */
+  balance: 'https://api.textin.com/user/finance/balance',
+  /**
+   * 套餐余量，需通过 api_path 指定要查询的产品
+   */
+  package: 'https://api.textin.com/user/finance/package',
+};
+
+/**
+ * 各功能对应的套餐查询 api_path
+ * GET https://api.textin.com/user/finance/package?api_path=xxx
+ */
+export const TEXTIN_PACKAGE_API_PATHS = {
+  /**
+   * 自动擦除手写文字
+   */
+  handwritten_erase: 'https://api.textin.com/ai/service/v1/handwritten_erase',
+  /**
+   * 图片转Word
+   */
+  doc_restore: 'https://api.textin.com/robot/v1.0/api/doc_restore',
+};
+
+export interface TIAccountBalance {
+  /**
+   * 账户总余额
+   */
+  balance?: number;
+  /**
+   * 可用 T 币余额
+   */
+  available_balance?: number;
+}
+
+export interface TIPackageItem {
+  /**
+   * 套餐 id
+   */
+  id?: number;
+  /**
+   * 该套餐覆盖的服务
+   */
+  service_list?: string[];
+  /**
+   * 套餐总次数
+   */
+  total_count?: number;
+  /**
+   * 剩余次数
+   */
+  remain_count?: number;
+  /**
+   * 已用次数
+   */
+  use_count?: number;
+  /**
+   * 套餐生效/失效时间
+   */
+  start_time?: string;
+  end_time?: string;
+}
+
+export interface TIPackageSummary {
+  /**
+   * 套餐总次数，多个套餐时累加
+   */
+  total_count: number;
+  /**
+   * 剩余次数，多个套餐时累加
+   */
+  remain_count: number;
+  /**
+   * 已用次数，多个套餐时累加
+   */
+  use_count: number;
+  /**
+   * 最晚的失效时间
+   */
+  end_time?: string;
+  /**
+   * 原始套餐列表
+   */
+  list: TIPackageItem[];
+}
 
 @Provide()
 export class ImageService {
@@ -128,5 +216,63 @@ export class ImageService {
       throw new Error(getCodeMessage(result.data.code) || 'PDF转Word失败');
     }
     return base64ToBuffer(result.data.result);
+  }
+
+  /**
+   * 查询当前 token 所属账户的余额
+   * GET https://api.textin.com/user/finance/balance
+   */
+  async getAccountBalance(): Promise<TIAccountBalance> {
+    const result = await axios.get(TEXTIN_USER_APIS.balance, {
+      headers: this.decorHeader(),
+      responseType: 'json',
+    });
+    const body = result.data || {};
+    if (body.code !== undefined && body.code !== 200) {
+      throw new Error(
+        getCodeMessage(String(body.code)) || body.message || '查询余额失败'
+      );
+    }
+    return body.data || {};
+  }
+
+  /**
+   * 查询某个产品（api_path）的套餐余量
+   * GET https://api.textin.com/user/finance/package?api_path=xxx
+   */
+  async getPackageQuota(apiPath: string): Promise<TIPackageItem[]> {
+    const result = await axios.get(TEXTIN_USER_APIS.package, {
+      params: { api_path: apiPath },
+      headers: this.decorHeader(),
+      responseType: 'json',
+    });
+    const body = result.data || {};
+    if (body.code !== undefined && body.code !== 200) {
+      throw new Error(
+        getCodeMessage(String(body.code)) || body.message || '查询套餐余量失败'
+      );
+    }
+    const list = (body.data || {}).list;
+    return Array.isArray(list) ? list : [];
+  }
+
+  /**
+   * 汇总某个产品的套餐余量，多个套餐时按次数累加
+   */
+  async getPackageSummary(apiPath: string): Promise<TIPackageSummary> {
+    const list = await this.getPackageQuota(apiPath);
+    const sum = (field: keyof TIPackageItem) =>
+      list.reduce((total, item) => total + (Number(item[field]) || 0), 0);
+    return {
+      total_count: sum('total_count'),
+      remain_count: sum('remain_count'),
+      use_count: sum('use_count'),
+      end_time: list
+        .map(item => item.end_time)
+        .filter(Boolean)
+        .sort()
+        .pop(),
+      list,
+    };
   }
 }
