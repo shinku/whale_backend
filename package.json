@@ -4,20 +4,33 @@
   "description": "",
   "private": true,
   "dependencies": {
+    "@langchain/core": "^1.2.12",
+    "@langchain/langgraph": "^1.4.17",
+    "@langchain/langgraph-checkpoint": "^1.1.5",
+    "@langchain/langgraph-sdk": "^1.11.2",
+    "@langchain/openai": "^1.5.13",
     "@midwayjs/bootstrap": "^3.12.0",
     "@midwayjs/core": "^3.12.0",
+    "@midwayjs/cron": "^3.20.24",
     "@midwayjs/logger": "^3.1.0",
     "@midwayjs/sequelize": "^3.20.3",
     "@midwayjs/upload": "^3.20.3",
     "@midwayjs/web": "^3.12.0",
     "ali-oss": "^6.22.0",
     "axios": "^1.8.3",
+    "deepagents": "^1.14.0",
     "docx": "^9.5.1",
     "egg": "^2.0.0",
+    "langchain": "^1.5.12",
+    "langsmith": "^0.8.12",
     "moment": "^2.30.1",
     "mysql2": "^3.13.0",
+    "playwright": "^1.63.0",
     "sequelize": "^6.37.6",
-    "sequelize-typescript": "^2.1.6"
+    "sequelize-typescript": "^2.1.6",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@midwayjs/egg-ts-helper": "^1.0.1",
@@ -25,6 +38,7 @@
     "@types/ali-oss": "^6.23.3",
     "@types/jest": "^29.5.14",
     "@types/node": "14",
+    "@types/turndown": "^5.0.6",
     "cross-env": "^6.0.0",
     "egg-mock": "^3.26.0",
     "jest": "^29.2.2",
@@ -32,10 +46,10 @@
     "mwtsc": "^1.4.0",
     "ts-jest": "^29.0.3",
     "ts-node": "^10.9.2",
-    "typescript": "~4.8.0"
+    "typescript": "^5.9.3"
   },
   "engines": {
-    "node": ">=12.0.0"
+    "node": ">=20.0.0"
   },
   "scripts": {
     "start_back": "NODE_ENV=production node ./bootstrap.js",

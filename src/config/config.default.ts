@@ -20,6 +20,33 @@ export default (appInfo: MidwayAppInfo) => {
     python: {
       bin: 'python3',
     },
+    /**
+     * 教育政策新闻采集（deepagents + playwright）
+     */
+    eduNews: {
+      // 定时任务开关，本地默认关闭，线上默认打开
+      enabled: true,
+      // 注意：采集站点地址不在这里配置，写在 NewsService 的 system prompt 里
+      // 每个站点列表页取多少条
+      fetchLimit: 20,
+      // 每轮最多打开多少个详情页（三个站点合计）
+      maxFetchPerRun: 30,
+      // 每轮最多入库多少条
+      maxSavePerRun: 10,
+      // 无头模式
+      headless: true,
+      // 浏览器启动参数
+      launchArgs: ['--no-sandbox', '--disable-dev-shm-usage'],
+      // 单页超时
+      timeout: 30000,
+      // 一轮 agent 执行的软超时
+      runTimeoutMs: 600000,
+      // 图片上传到 OSS 的目录
+      ossFolder: 'edu-news/',
+      // 模型，复用 deepseek 配置
+      model: 'deepseek-chat',
+      baseUrl: 'https://api.deepseek.com/v1',
+    },
     upload: {
       // mode: UploadMode, 默认为file，即上传到服务器临时目录，可以配置为 stream
       mode: 'file',

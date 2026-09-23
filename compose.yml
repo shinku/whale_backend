@@ -14,7 +14,7 @@ services:
   mysql:
     # 国内网络拉取 docker.io 较慢时，可在 .env 里覆盖成镜像站地址，例如：
     #   MYSQL_IMAGE=docker.m.daocloud.io/library/mysql:8.0
-    image: ${MYSQL_IMAGE:-docker.io/library/mysql:8.0}
+    image: docker.m.daocloud.io/library/mysql:8.0
     container_name: whale-mysql
     restart: unless-stopped
     # 参数与 src/config/config.local.ts 的 sequelize 配置对齐
@@ -46,21 +46,5 @@ services:
       timeout: 5s
       retries: 10
       start_period: 40s
-
-  # 可选的图形化数据库客户端：podman compose --profile tools up -d
-  # 访问 http://localhost:8080 ，服务器填 mysql，用户名 root，密码 STARKU0303，数据库 whale_db
-  adminer:
-    image: ${ADMINER_IMAGE:-docker.io/library/adminer:4}
-    container_name: whale-adminer
-    restart: unless-stopped
-    profiles: ['tools']
-    environment:
-      ADMINER_DEFAULT_SERVER: mysql
-      TZ: Asia/Shanghai
-    ports:
-      - '127.0.0.1:8080:8080'
-    depends_on:
-      - mysql
-
 volumes:
   mysql_data:
