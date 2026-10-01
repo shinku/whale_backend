@@ -35,18 +35,6 @@ export class FileService {
     fileUrl?: string;
   }) {
     switch (option.type) {
-      case 'pdf2doc': {
-        if(!option.file) {
-          throw new Error('file is required');
-        }
-        const filename = `${option.userId}_${Date.now()}.docx`;
-        if (!existsSync(join(this.outputDir, '/tmp'))) {
-          mkdirSync(join(this.outputDir, '/tmp'));
-        }
-        const targetFile = join(this.outputDir, '/tmp', filename);
-        await this.doPdfToWord(option.file, targetFile);
-        return filename;
-      }
       case 'pdf2doc_textin': {
         if(!option.file && !option.stream && !option.fileUrl) {
           throw new Error('file or stream or fileUrl is required');

@@ -168,18 +168,12 @@ export class FileController {
     const lane = fields?.lane || this.ctx.request.body?.lane || LANE.WHALE;
     const fileUrl = fields?.file_url || this.ctx.request.body?.file_url;
     const data = files ? readFileSync(join(files[0].data)) : null;
-    console.log({
-      userId,
-      lane,
-      files,fields,
-      fileUrl,
-      body: this.ctx.request.body
-    });
-    if (!data || !fileUrl) {
-      throw new Error('file is required');
-    }
+    
     switch (action) {
       case 'clear_hands_write': {
+        if (!data) {
+          throw new Error('data file is required');
+        }
         const result = await this.imageService.eraserHandWriteImage(data);
         const filename = userId + Math.random() * 100 + 'after.jpg';
         if (result.data.code === 40003) {
