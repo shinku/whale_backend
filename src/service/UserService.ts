@@ -1,4 +1,4 @@
-import { Provide, Scope, ScopeEnum } from '@midwayjs/core';
+import { Config, Provide, Scope, ScopeEnum } from '@midwayjs/core';
 import { Op, Sequelize } from 'sequelize';
 import { LANE } from '../core/enums';
 import {
@@ -155,6 +155,8 @@ export class UserService {
     return remainCount;
   }
 
+  @Config("limitCheck")
+  limitCheck!: boolean;
   /**
    * 调用成功后对次数 -1，仅在余量大于 0 时才会真正扣减
    */
@@ -168,6 +170,9 @@ export class UserService {
       lane,
       limitField
     );
+    if (!this.limitCheck) {
+      return remainCount
+    }
     if (remainCount <= 0) {
       throw new Error(`${limitField}_is_used_up`);
     }
