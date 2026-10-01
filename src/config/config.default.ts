@@ -51,7 +51,7 @@ export default (appInfo: MidwayAppInfo) => {
       // 手动刷新的按天调用凭证，相对项目根目录（logs/ 已在 .gitignore 里）
       refreshRecordFile: 'logs/edu-news-refresh.txt',
     },
-    limitCheck: true,
+    
     upload: {
       // mode: UploadMode, 默认为file，即上传到服务器临时目录，可以配置为 stream
       mode: 'file',
