@@ -146,10 +146,22 @@ $ podman exec -it whale-mysql mysql -uroot -pSTARKU0303 whale_db -e 'show tables
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/edu/news` | 最新 10 条，`available = true`；`limit` 可选，最大 50 |
-| GET | `/api/edu/news/refresh` | 手动触发一次采集，默认后台执行；加 `?wait=1` 同步返回采集统计 |
+| GET | `/api/edu/news/refresh` | 手动触发一次采集，默认后台执行；加 `?wait=1` 同步返回采集统计。非 local 环境每天最多 2 次 |
 
 返回字段：`id`、`title`、`content`、`source`、`publish_time`、`category`、`url`。
 其中 `content` 是 Markdown 文档（图片已是 OSS 地址），前端按 Markdown 渲染即可。
+
+### 手动刷新的调用凭证
+
+`/api/edu/news/refresh` 每次被调用都会往本地 txt 追加一行凭证
+（`YYYY-MM-DD HH:mm:ss\tmanual`，时间按 `+08:00` 计算），
+默认路径 `logs/edu-news-refresh.txt`，可用 `eduNews.refreshRecordFile` 改成其他路径。
+
+- `NODE_ENV=local`（或 `MIDWAY_SERVER_ENV=local`）：**不限制次数**，只记录凭证；
+- 其他环境：按自然日限制，默认**每天 2 次**（`eduNews.refreshDailyLimit`），
+  额度用尽时接口返回 `started: false` 与原因，不会触发采集。
+
+额度判断只统计凭证文件里日期等于今天的行，历史记录保留不影响次日额度。
 
 ### 采集链路（注册给 agent 的 tools）
 
@@ -188,6 +200,8 @@ agent 正常跑完却一条都没入库时，会尊重它的判断（认为都�
 | `timeout` / `runTimeoutMs` | `30000` / `600000` | 单页超时 / 一轮软超时 |
 | `ossFolder` | `edu-news/` | 图片在 OSS 的目录，文件名用图片内容 md5，重复采集不会产生新对象 |
 | `model` / `baseUrl` | `deepseek-chat` / `https://api.deepseek.com/v1` | 复用 `deepseek.appId` |
+| `refreshDailyLimit` | `2` | 非 local 环境每天允许手动刷新的次数 |
+| `refreshRecordFile` | `logs/edu-news-refresh.txt` | 手动刷新凭证文件，相对项目根目录 |
 
 定时任务的 cron 表达式写在 `src/task/EduNewsTask.ts`（`0 0 6,18 * * *`，时区 `Asia/Shanghai`）。
 线上 `pm2 -i 4` 会有 4 个 worker 各触发一次，任务里用 `NODE_APP_INSTANCE === '0'` 做了单实例守卫，

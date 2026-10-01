@@ -34,6 +34,10 @@ export interface IEduNewsConfig {
   ossFolder: string;
   model: string;
   baseUrl: string;
+  /** 非 local 环境每天允许手动刷新的次数 */
+  refreshDailyLimit: number;
+  /** 手动刷新凭证文件，相对路径按项目根目录解析 */
+  refreshRecordFile: string;
 }
 
 export interface IArticleListItem {

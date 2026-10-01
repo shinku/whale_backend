@@ -46,6 +46,10 @@ export default (appInfo: MidwayAppInfo) => {
       // 模型，复用 deepseek 配置
       model: 'deepseek-chat',
       baseUrl: 'https://api.deepseek.com/v1',
+      // 非 local 环境每天最多手动刷新 2 次，local 不限次数
+      refreshDailyLimit: 2,
+      // 手动刷新的按天调用凭证，相对项目根目录（logs/ 已在 .gitignore 里）
+      refreshRecordFile: 'logs/edu-news-refresh.txt',
     },
     upload: {
       // mode: UploadMode, 默认为file，即上传到服务器临时目录，可以配置为 stream

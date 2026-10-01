@@ -1,5 +1,6 @@
 import { Get, Inject, Provide } from '@midwayjs/core';
 import { Context } from 'egg';
+import { EduNewsRefreshGuardService } from '../service/EduNewsRefreshGuardService';
 import { NewsService } from '../service/NewsService';
 import Api from './api/Api';
 
@@ -11,6 +12,9 @@ export class EduController {
 
   @Inject()
   newsService!: NewsService;
+
+  @Inject()
+  refreshGuard!: EduNewsRefreshGuardService;
 
   /**
    * 最新教育政策新闻（默认 10 条）
@@ -29,10 +33,22 @@ export class EduController {
   }
 
   /**
-   * 手动触发一次采集，wait=1 时同步等待结果
+   * 手动触发一次采集，wait=1 时同步等待结果。
+   * 非 local 环境每天最多调用 2 次，调用凭证写在本地 txt 里
    */
   @Get('/news/refresh')
   async refreshNews() {
+    const quota = this.refreshGuard.consume('manual');
+    if (!quota.allowed) {
+      return {
+        data: {
+          started: false,
+          message: quota.reason,
+          quota,
+        },
+      };
+    }
+
     const wait = ['1', 'true'].includes(String(this.ctx.query.wait || ''));
     if (!wait) {
       // 采集要跑几分钟，默认后台执行，避免请求超时
@@ -43,11 +59,15 @@ export class EduController {
         data: {
           started: true,
           message: '采集任务已在后台启动，可稍后查询 /api/edu/news',
+          quota,
         },
       };
     }
     return {
-      data: await this.newsService.runCollect('manual'),
+      data: {
+        ...(await this.newsService.runCollect('manual')),
+        quota,
+      },
     };
   }
 }
