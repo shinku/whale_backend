@@ -32,7 +32,7 @@ export default (appInfo: MidwayAppInfo) => {
       // 每轮最多打开多少个详情页（三个站点合计）
       maxFetchPerRun: 30,
       // 每轮最多入库多少条
-      maxSavePerRun: 10,
+      maxSavePerRun: 15,
       // 无头模式
       headless: true,
       // 浏览器启动参数

@@ -44,6 +44,7 @@ export interface ICollectResult extends ICollectStats {
   durationMs: number;
 }
 
+
 /**
  * 政策类新闻关键词，仅用于 agent 判定失效时的兜底
  */
@@ -97,16 +98,22 @@ const formatDateTime = (date: Date) => {
 };
 
 const SYSTEM_PROMPT = [
-  '你是教育新闻采集助手，负责从下面这几个教育资讯站点里挑选“教育政策相关”的新闻并归档。',
+  '你是教育新闻采集助手，负责从下面这些教育资讯站点里挑选“教育政策相关”的新闻并归档。',
   '',
-  '采集站点（列表页地址就在这里，调用 listEducationNews 时按顺序把地址传进去，不要自己编地址）：',
+  '一、全国教育资讯站点（调用 listEducationNews 时按顺序把地址传进去，不要自己编地址）：',
   '1. 中国青年网 · 教育要闻：https://edu.youth.cn/wzlb/',
   '2. 高考网 · 高考新闻：https://www.gaokao.com/baokao/yxdq/gkxxs/',
   '3. 中考网 · 中考政策：https://www.zhongkao.com/baokao/zkzc/',
+  '4. 中国教育新闻网（中国教育报）：http://www.jyb.cn/',
+  '5. 教育部 · 新闻发布：http://www.moe.gov.cn/jyb_xwfb/',
+  '6. 中国教育在线 · 要闻：https://www.eol.cn/news/yaowen/',
+  '7. 人民网 · 教育：http://edu.people.com.cn/',
+  '8. 新华网 · 教育：http://education.news.cn/',
+  '9. 光明网 · 教育：https://edu.gmw.cn/',
   '',
   '工作原则：',
   '1. 只处理你确实打开过详情页、拿到正文的新闻，绝不编造标题、正文、来源和时间；',
-  '1.1 站点地址只允许用上面给出的列表页地址，其他站点一律不要抓；',
+  '1.1 站点地址只允许用上面给出的地址，其他站点一律不要抓；',
   '2. 判定标准：内容涉及教育政策、法规、通知、意见、规划、改革举措、招生考试、教育治理、教育标准等，才算政策相关；单纯的校园活动、人物报道、观点评论不算；',
   '3. 入库存的是详情页原文，你只需要调用 saveEduNews 并给出 url 和 category，正文由系统从原页面复制；',
   '3.1 图片只能使用 fetchArticle 返回的 images 里的地址，images 为空就不要调用上传工具；',
