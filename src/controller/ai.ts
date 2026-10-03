@@ -25,8 +25,8 @@ export class Ai {
 
   @Post('/activity')
   async getActivity() {
-    const { actId, config } = this.ctx.request.body;
-    const systemPrompt = await this.promptService.getPrompt(actId);
+    const { actId, config, prompt } = this.ctx.request.body;
+    const systemPrompt = prompt || await this.promptService.getPrompt(actId);
     return this.aiService.chatWithDeepSeek(
       JSON.stringify(config),
       systemPrompt
