@@ -63,7 +63,7 @@ export function base64ToImage(base64String: string, outputFilePath: string) {
 
 export function base64ToBuffer(base64String: string) {
   // 移除Base64编码的前缀（如：data:image/png;base64,）
-  const base64Data = base64String.replace(/^data:\w+;base64,/, '');
+  const base64Data = base64String.replace(/^data:[^,]*,/, '');
 
   // 将Base64字符串转换为Buffer
   const imageBuffer = Buffer.from(base64Data, 'base64');
@@ -389,6 +389,112 @@ export class FileController {
       userId,
       lane,
       FILE_EXPEND_2_FILE_COUNT_LIMIT
+    );
+    return fileName;
+  }
+
+  /**
+   * 图片 base64 识别并转换成 word（docx）
+   * {
+   *  "base64": "data:image/png;base64,..."
+   * }
+   */
+  @Post('/base64_to_word', {
+    middleware: [Expend2FileLimitMiddleware],
+  })
+  async base64ToWord() {
+    const userId = this.ctx.get('x-user-id');
+    if (!userId) {
+      throw new Error('userId is required');
+    }
+    const lane = this.ctx.request.body?.lane || LANE.WHALE;
+    const base64 = this.ctx.request.body.base64;
+    if (!base64) {
+      throw new Error('base64 is empty');
+    }
+    const buffer = await this.imageService.tiBase64ImageToWord(base64);
+    const fileName = `pub/${Date.now()}_${Math.random() * 100}.docx`;
+    await this.ossService.uploadStream({
+      stream: Stream.Readable.from(buffer),
+      fileName: fileName,
+      forbidOverride: 'true',
+    });
+    await this.userService.consumeCountLimit(
+      userId,
+      lane,
+      FILE_EXPEND_2_FILE_COUNT_LIMIT
+    );
+    return fileName;
+  }
+
+  /**
+   * HTML 转 PDF
+   * {
+   *  "html": "<h1>标题</h1><p>正文</p>",
+   *  "landscape": false
+   * }
+   */
+  @Post('/html_to_pdf', {
+    middleware: [ConvertFileLimitMiddleware],
+  })
+  async htmlToPdf() {
+    return this.htmlToFile({
+      ext: 'pdf',
+      build: html =>
+        this.fileService.htmlToPdf(html, {
+          landscape: this.ctx.request.body.landscape,
+          printBackground: this.ctx.request.body.print_background,
+          format: this.ctx.request.body.format,
+        }),
+    });
+  }
+
+  /**
+   * HTML 转 Word（.docx）
+   * {
+   *  "html": "<h1>标题</h1><p>正文</p>"
+   * }
+   */
+  @Post('/html_to_doc', {
+    middleware: [ConvertFileLimitMiddleware],
+  })
+  async htmlToDoc() {
+    return this.htmlToFile({
+      ext: 'docx',
+      build: html => this.fileService.htmlToDoc(html),
+    });
+  }
+
+  /**
+   * html_to_pdf / html_to_doc 的公共执行体：
+   * 校验参数 -> 生成文件 Buffer -> 上传 OSS -> 扣减次数 -> 返回文件名
+   * @param option.ext 产物后缀
+   * @param option.build 由 html 生成文件 Buffer 的方法
+   */
+  private async htmlToFile(option: {
+    ext: 'pdf' | 'docx';
+    build: (html: string) => Buffer | Promise<Buffer>;
+  }) {
+    const userId = this.ctx.get('x-user-id');
+    if (!userId) {
+      throw new Error('userId is required');
+    }
+    const lane = this.ctx.request.body?.lane || LANE.WHALE;
+    const html = this.ctx.request.body.html;
+    if (!html) {
+      throw new Error('html is empty');
+    }
+    const buffer = await option.build(html);
+    const fileName = `pub/${Date.now()}_${Math.random() * 100}.${option.ext}`;
+    await this.ossService.uploadStream({
+      stream: Stream.Readable.from(buffer),
+      fileName: fileName,
+      forbidOverride: 'true',
+    });
+    await this.userService.consumeCountLimit(
+      userId,
+      lane,
+      FILE_UPLOAD_ACTION_COUNT_LIMIT.convert_file
     );
     return fileName;
   }

@@ -37,6 +37,7 @@ export const IMAGE_HANDLE_APIS = {
   handwritten_erase: 'https://api.textin.com/ai/service/v1/handwritten_erase',
   img_to_pdf: 'https://api.textin.com/ai/service/v1/file-convert/image-to-pdf',
   pdf_to_docx: 'https://api.textin.com/ai/service/v1/file-convert/pdf-to-word',
+  img_to_word: 'https://api.textin.com/robot/v1.0/api/doc_restore',
 };
 
 export const TEXTIN_USER_APIS = {
@@ -225,6 +226,33 @@ export class ImageService {
       throw new Error(getCodeMessage(result.data.code) || 'PDF转Word失败');
     }
     return base64ToBuffer(result.data.result);
+  }
+
+  /**
+   * base64 图片识别并转换成 word（docx）
+   * 参考：https://www.textin.com/document/doc_restore
+   * @param base64 图片 base64，支持带 data URL 前缀（如 data:image/png;base64,）
+   * @returns docx 的 Buffer
+   */
+  async tiBase64ImageToWord(base64: string) {
+    // base64 转二进制后按 application/octet-stream 传给合合信息
+    const buffer = base64ToBuffer(base64);
+    const result = await axios.post(IMAGE_HANDLE_APIS.img_to_word, buffer, {
+      headers: this.decorHeader({
+        'Content-Type': 'application/octet-stream',
+      }),
+      responseType: 'json',
+    });
+    if (result.data.code !== 200) {
+      throw new Error(getCodeMessage(result.data.code) || '图片转Word失败');
+    }
+    const resultData = result.data.result;
+    const docxBase64 =
+      typeof resultData === 'string' ? resultData : resultData?.docx;
+    if (!docxBase64) {
+      throw new Error('图片转Word失败');
+    }
+    return base64ToBuffer(docxBase64);
   }
 
   /**

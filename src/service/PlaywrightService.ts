@@ -594,6 +594,49 @@ export class PlaywrightService {
     await this.close();
   }
 
+  /**
+   * 用无头 chromium 渲染 HTML 并导出 PDF（保真还原 HTML 样式）
+   * @param html 完整 HTML 文档或片段
+   */
+  async renderHtmlToPdf(
+    html: string,
+    options: {
+      format?: 'A4' | 'A3' | 'Letter';
+      landscape?: boolean;
+      printBackground?: boolean;
+      margin?: {
+        top?: string;
+        bottom?: string;
+        left?: string;
+        right?: string;
+      };
+    } = {}
+  ): Promise<Buffer> {
+    const context = await this.getContext();
+    const page = await context.newPage();
+    try {
+      await page.setContent(html, {
+        waitUntil: 'networkidle',
+        timeout: this.timeout,
+      });
+      const pdf = await page.pdf({
+        format: options.format || 'A4',
+        landscape: options.landscape || false,
+        // 默认打印背景色/图，否则 CSS 背景、色块会丢失
+        printBackground: options.printBackground !== false,
+        margin: {
+          top: options.margin?.top || '12mm',
+          bottom: options.margin?.bottom || '12mm',
+          left: options.margin?.left || '10mm',
+          right: options.margin?.right || '10mm',
+        },
+      });
+      return Buffer.from(pdf);
+    } finally {
+      await page.close().catch(() => null);
+    }
+  }
+
   @Destroy()
   async close() {
     const context = this.context;

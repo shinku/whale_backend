@@ -17,6 +17,16 @@ export default (appInfo: MidwayAppInfo) => {
       hostname: '0.0.0.0',
     },
     middleware: ['logMiddleware', 'laneMiddleware', 'allMiddleware'],
+    /**
+     * 请求体大小限制。
+     * html_to_pdf / html_to_doc 会在 body 里内联大段 HTML（常含 base64 图片），
+     * 默认 1mb 会直接抛 PayloadTooLargeError，这里放宽到 50mb。
+     */
+    bodyParser: {
+      jsonLimit: '50mb',
+      formLimit: '50mb',
+      textLimit: '50mb',
+    },
     python: {
       bin: 'python3',
     },
