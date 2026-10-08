@@ -359,6 +359,40 @@ export class FileController {
     }
   }
 
+  /**
+   * 多张 base64 图片拼接成一个 pdf
+   * {
+   *  "base64_list": ["data:image/png;base64,...", "data:image/png;base64,..."]
+   * }
+   */
+  @Post('/base64_to_pdf', {
+    middleware: [Expend2FileLimitMiddleware],
+  })
+  async base64ToPdf() {
+    const userId = this.ctx.get('x-user-id');
+    if (!userId) {
+      throw new Error('userId is required');
+    }
+    const lane = this.ctx.request.body?.lane || LANE.WHALE;
+    const base64List = this.ctx.request.body.base64_list;
+    if (!base64List || base64List.length === 0) {
+      throw new Error('base64_list is empty');
+    }
+    const stream = await this.imageService.tiBase64ImageToPdf(base64List);
+    const fileName = `pub/${Date.now()}_${Math.random() * 100}.pdf`;
+    await this.ossService.uploadStream({
+      stream: Stream.Readable.from(stream),
+      fileName: fileName,
+      forbidOverride: 'true',
+    });
+    await this.userService.consumeCountLimit(
+      userId,
+      lane,
+      FILE_EXPEND_2_FILE_COUNT_LIMIT
+    );
+    return fileName;
+  }
+
   /*@Get('/test_file')
   async testFile() {
     const targetFile = join(

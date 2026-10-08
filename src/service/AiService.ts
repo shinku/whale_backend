@@ -37,7 +37,7 @@ class DeepSeekClient {
             { role: 'user', content: promots.chat },
           ],
           temperature: options.temperature || 0.7,
-          max_tokens: options.max_tokens || 2048,
+          // max_tokens: options.max_tokens || 2048,
         },
         {
           headers: {

@@ -167,20 +167,29 @@ export class ImageService {
 
   async tiImageToPdf(files: string[]) {
     // 读取文件，并转换为base64
-    const lists = await Promise.all(
+    const base64List = await Promise.all(
       files.map(async file => {
         const buffer = await this.ossService.getFile(file, 'buffer');
-        const base64Data = buffer.content.toString('base64');
-        return {
-          fileName: file,
-          data: base64Data,
-        };
+        return buffer.content.toString('base64');
       })
+    );
+    return this.tiBase64ImageToPdf(base64List);
+  }
+
+  /**
+   * 多张 base64 图片拼接成一个 pdf
+   * @param base64List base64 图片列表，兼容带 data URL 前缀（如 data:image/png;base64,）的写法
+   * @returns pdf 的 Buffer
+   */
+  async tiBase64ImageToPdf(base64List: string[]) {
+    // 兼容前端直接传 canvas.toDataURL() 的结果，去掉 data:image/xxx;base64, 前缀
+    const files = base64List.map(item =>
+      item.replace(/^data:[\w.+-]+\/[\w.+-]+;base64,/, '')
     );
     const result = await axios.post(
       IMAGE_HANDLE_APIS.img_to_pdf,
       {
-        files: lists.map(item => item.data),
+        files,
       },
       {
         headers: this.decorHeader({
