@@ -2,6 +2,26 @@
 
 本仓库对 AI 编码助手的约定。
 
+## dev server 默认已经在跑，改完代码不要重复 `npm run dev`
+
+`npm run dev`（= `node dev.js`）会一次拉起两个带 watch 的进程：
+
+- 后端 `dev-app`：`mwtsc --watch --run @midwayjs/mock/app.js`，监听 7001，改 `src/` 会自动重新编译并重启应用；
+- 前端 `front`：`vite`，监听 3000，走 HMR。
+
+所以**改完代码直接等 1~2 秒再验证即可，不要再执行 `npm run dev`**，
+重复跑会撞端口、起出多余的 node 进程（尤其会抢 7001）。
+
+不确定是否已经在跑时，先只读检查，不要盲启：
+
+```bash
+lsof -nP -iTCP:7001 -sTCP:LISTEN   # 后端
+lsof -nP -iTCP:3000 -sTCP:LISTEN   # 前端
+curl -s -o /dev/null -w "%{http_code}\n" --max-time 5 http://127.0.0.1:7001/
+```
+
+有监听 / 返回 200 就说明已经在跑。只有当端口没人监听（watch 进程真的挂了）时才手动起一次。
+
 ## 验证、排查一律在内存里跑，不要新建临时脚本文件
 
 需要验证运行时行为（跑个函数、连数据库查一行、打接口、试一段抓取逻辑）时，

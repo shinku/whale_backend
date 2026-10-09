@@ -7,7 +7,7 @@
 | 接口 | 路径 | 产物 | 实现 |
 | --- | --- | --- | --- |
 | HTML 转 PDF | `POST /api/file/html_to_pdf` | `.pdf` | 无头 Chromium 渲染 HTML 后打印（保真还原样式） |
-| HTML 转 Word | `POST /api/file/html_to_doc` | `.docx`（真 OOXML） | `html-docxjs-compiler` 把 HTML 转成 docx 元素后打包 |
+| HTML 转 Word | `POST /api/file/html_to_doc` | `.docx`（真 OOXML） | 默认 `regural`：`html-docxjs-compiler` 把 HTML 转成 docx 元素后打包；可选 `pdfkit-convert`：HTML→PDF 保真渲染后按页转图片再塞进 docx |
 
 两者的整体行为一致：校验参数 → 生成文件 → 上传 OSS → 返回文件名。
 
@@ -23,7 +23,8 @@
 > 路径说明：控制器使用 `@Api('/file')` 装饰，实际前缀为 `/api`。
 > 对应源码：`src/controller/file.ts`（`htmlToPdf` / `htmlToDoc`）、
 > `src/service/FileService.ts`（`htmlToPdf` / `htmlToDoc`）、
-> `src/service/PlaywrightService.ts`（`renderHtmlToPdf`）。
+> `src/service/PlaywrightService.ts`（`renderHtmlToPdf`）、
+> `src/service/utils/file.ts`（`htmlToDocx` / `pdfBufferToDocx` 等转换实现）。
 
 ## 2. 请求参数
 
@@ -51,7 +52,17 @@
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `html` | string | 是 | 完整 HTML 文档或片段 |
+| `toStrategy` | string | 否 | 转换策略，默认 `regural`；可选 `pdfkit-convert`（取值非法时按 `regural` 处理） |
 | `lane` | string | 否 | 业务线，默认 `whale`，一般前端不用传 |
+
+两种策略：
+
+| 策略 | 原理 | 特点 |
+| --- | --- | --- |
+| `regural`（默认） | `html-docxjs-compiler` 把 HTML 解析成 docx 元素后打包 | 稳定、产物是真正的可编辑 Word 元素；但复杂布局/样式还原度有限 |
+| `pdfkit-convert` | 无头 Chromium 把 HTML 渲染成 PDF，再把 PDF 每一页光栅化成图片后塞进 docx | 保真度高（几乎和 PDF 一模一样）；产物体积更大、Word 里是整页图片不可编辑，且偶发报错 |
+
+> `pdfkit-convert` 失败时默认会自动回退到 `regural`，保证接口仍能返回结果。
 
 ### 2.4 校验规则
 
@@ -78,7 +89,19 @@ curl -X POST 'http://localhost:7001/api/file/html_to_pdf' \
 curl -X POST 'http://localhost:7001/api/file/html_to_doc' \
   -H 'Content-Type: application/json' \
   -H 'x-user-id: <用户openid>' \
-  -d '{ "html": "<h1>标题</h1><p>正文</p>" }'
+  -d '{
+    "html": "<h1>标题</h1><p>正文</p>",
+    "toStrategy": "regural"
+  }'
+
+# HTML -> Word（PDF 保真策略：几乎和 html_to_pdf 一模一样）
+curl -X POST 'http://localhost:7001/api/file/html_to_doc' \
+  -H 'Content-Type: application/json' \
+  -H 'x-user-id: <用户openid>' \
+  -d '{
+    "html": "<h1>标题</h1><p>正文</p>",
+    "toStrategy": "pdfkit-convert"
+  }'
 ```
 
 ### 3.2 前端调用（fetch）
@@ -105,14 +128,14 @@ async function htmlToPdf(html, options = {}) {
   return json.data; // "pub/1728381842163_42.7.pdf"
 }
 
-async function htmlToDoc(html) {
+async function htmlToDoc(html, toStrategy = 'regural') {
   const res = await fetch('/api/file/html_to_doc', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-user-id': getUserId(),
     },
-    body: JSON.stringify({ html }),
+    body: JSON.stringify({ html, toStrategy }), // 'regural' | 'pdfkit-convert'
   });
   const json = await res.json();
   if (!res.ok || json.status !== 200) {
@@ -188,13 +211,19 @@ const jumpUrl = `/api/file/get/${fileName}`;              // 后端 302 跳转�
 ### 6.2 html_to_doc
 
 1. **产物是真 `.docx`**（OOXML），不是把 HTML 改名的伪 Word 文件。
-2. **保真度有限**：只映射标题、段落、列表、表格、粗体/斜体/下划线/删除线、部分行内样式（颜色、对齐等）。
-   - **CSS 类/外部样式表不生效**：请尽量用**行内 style**，因为转换器不解析 `<style>` 里的选择器。
-   - 复杂布局（定位、flex/grid、多栏、阴影、圆角等）不会还原。
-3. **图片**：
+2. **两种转换策略**（`toStrategy`）：
+   - `regural`（默认）：把 HTML 转成 docx **元素**，产物可继续在 Word 里编辑。
+     - 保真度有限：只映射标题、段落、列表、表格、粗体/斜体/下划线/删除线、部分行内样式（颜色、对齐等）。
+     - **CSS 类/外部样式表不生效**：请尽量用**行内 style**，因为转换器不解析 `<style>` 里的选择器。
+     - 复杂布局（定位、flex/grid、多栏、阴影、圆角等）不会还原。
+   - `pdfkit-convert`：Chromium 把 HTML 渲染成 PDF，再把 **PDF 每一页转成一张 PNG** 后放进 docx，每个 PDF 页对应一个 docx 分节，几乎 100% 还原 PDF 样式与分页。
+     - 产物在 Word 里是**整页图片**，不可编辑；文件体积明显更大（可用 `scale` 调整清晰度，未开放给接口参数，默认 2 倍）。
+     - 走一次浏览器渲染，耗时与 `html_to_pdf` 相当（通常 1~5s）。
+     - 该策略偶发报错，**默认失败时自动回退到 `regural`**。
+3. **图片**（主要针对 `regural` 策略）：
    - `data:image/...;base64,...` 内联图片支持；
    - `http/https` 外链图片**默认不会下载**（未配置下载策略），会被跳过，请在 docx 预览里做好容错。
-4. **接口耗时**：基本是本地转换 + OSS 上传，通常 < 1s。
+4. **接口耗时**：`regural` 基本是本地转换 + OSS 上传，通常 < 1s；`pdfkit-convert` 含一次浏览器渲染，通常 1~5s。
 
 ### 6.3 通用
 

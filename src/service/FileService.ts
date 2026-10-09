@@ -1,47 +1,23 @@
 import { Config, Inject, Provide } from '@midwayjs/core';
 import { spawn } from 'child_process';
-import { Document, Packer } from 'docx';
 import { existsSync, mkdirSync, readFileSync, unlink, writeFileSync } from 'fs';
-import { transformHtmlToDocx } from 'html-docxjs-compiler';
 import { join } from 'path';
 import { ImageService } from './ImageService';
 import { OssService } from './OssService';
 import { PlaywrightService } from './PlaywrightService';
+import {
+  HtmlToDocStrategy,
+  htmlToDocx,
+  pdfBufferToDocx,
+  wrapHtmlDocument,
+} from './utils/file';
 
 export const switchPythonEnv = async (cmd: string) => {
   return cmd;
 };
 
-/**
- * 给 HTML 片段补齐 doc 文档所需的头部结构（DOCTYPE / html / head / body）。
- * 已经是完整文档（含 doctype 或 <html>）时原样返回，避免重复嵌套。
- */
-export const wrapHtmlDocument = (html = '') => {
-  const src = String(html ?? '');
-  if (!src.trim()) {
-    return src;
-  }
-  if (/<!doctype/i.test(src) || /<html[\s>]/i.test(src)) {
-    return src;
-  }
-  // 片段里若自带 head / body，取出内容复用，避免丢失 meta / style
-  const headMatch = /<head[^>]*>([\s\S]*?)<\/head>/i.exec(src);
-  const bodyMatch = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(src);
-  const head = headMatch ? headMatch[1].trim() : '';
-  const body = bodyMatch ? bodyMatch[1].trim() : src;
-  return `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-<meta charset="utf-8" />
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-<title>document</title>
-${head}
-</head>
-<body>
-${body}
-</body>
-</html>`;
-};
+// 兼容历史用法：wrapHtmlDocument 已迁移到 utils/file.ts，这里继续对外透出
+export { wrapHtmlDocument };
 
 /**
  * try liber office ?
@@ -82,24 +58,52 @@ export class FileService {
 
   /**
    * HTML -> Word（真 .docx，基于 html-docxjs-compiler 把 HTML 转成 docx 元素）
+   * toStrategy: regural 常规，目前的。transformHtmlToDocx方法
+   * pdfkit-convert pdfkit-convert，pdfkit-convert方法
+   * 目前两种方法都可以，regural 方法更稳定，pdfkit-convert 方法有时会报错。
+   * pdfkit-convert 方法的优点是可以直接把 HTML 转成 PDF，再通过pdfkit框架得到每页的图片后再通过docx框架再转成 Word，保留了 PDF 的样式。
    */
-  async htmlToDoc(html: string): Promise<Buffer> {
+  async htmlToDoc(
+    html: string,
+    toStrategy: HtmlToDocStrategy = 'regural',
+    options: {
+      /** pdfkit-convert：PDF 页面光栅化倍率 */
+      scale?: number;
+      /** pdfkit-convert：HTML -> PDF 的纸张尺寸 */
+      format?: 'A4' | 'A3' | 'Letter';
+      /** pdfkit-convert：HTML -> PDF 是否横向 */
+      landscape?: boolean;
+      /** pdfkit-convert：HTML -> PDF 是否打印背景色/图 */
+      printBackground?: boolean;
+      /** pdfkit-convert 失败时是否回退到 regural，默认 true */
+      fallbackToRegular?: boolean;
+    } = {}
+  ): Promise<Buffer> {
     if (!html) {
       throw new Error('html is empty');
     }
-    // 补全 doc 文档所需的 html 头（DOCTYPE / html / head / body）后再转换
-    const htmlContent = wrapHtmlDocument(html)
-    const children = await transformHtmlToDocx(htmlContent);
-    writeFileSync(join(this.outputDir, 'tmp/test.html'), htmlContent);
-    const doc = new Document({
-      sections: [
-        {
-          properties: {},
-          children: children as any,
-        },
-      ],
-    });
-    return Packer.toBuffer(doc);
+    if (toStrategy === 'pdfkit-convert') {
+      try {
+        // 先用无头 chromium 把 HTML 渲染成 PDF（保真样式），再把 PDF 每页转成图片塞进 docx
+        const pdf = await this.htmlToPdf(wrapHtmlDocument(html), {
+          format: options.format,
+          landscape: options.landscape,
+          printBackground: options.printBackground,
+        });
+        return await pdfBufferToDocx(pdf, { scale: options.scale });
+      } catch (err) {
+        if (options.fallbackToRegular === false) {
+          throw err;
+        }
+        // pdfkit-convert 偶发报错，默认回退到更稳定的 regural 策略
+        console.warn(
+          `[htmlToDoc] pdfkit-convert 失败，回退到 regural 策略: ${
+            (err as Error)?.message
+          }`
+        );
+      }
+    }
+    return htmlToDocx(html);
   }
 
   async convert(option: {
@@ -112,7 +116,7 @@ export class FileService {
   }) {
     switch (option.type) {
       case 'pdf2doc_textin': {
-        if(!option.file && !option.stream && !option.fileUrl) {
+        if (!option.file && !option.stream && !option.fileUrl) {
           throw new Error('file or stream or fileUrl is required');
         }
         let stream: Buffer | string = option.stream as Buffer | string;
@@ -120,7 +124,7 @@ export class FileService {
           stream = option.fileUrl;
         }
         if (!stream) {
-          stream = readFileSync(join(option.file || ""));
+          stream = readFileSync(join(option.file || ''));
         }
 
         const uploadedDoc = await this.imageService.tiPdfToDocx(stream);
@@ -169,7 +173,7 @@ export class FileService {
           const log = Buffer.from(data).toString();
           console.log(log + '\n');
         });
-        cli.stdout.on('end', (data:string) => {
+        cli.stdout.on('end', (data: string) => {
           resolve(data);
         });
         cli.stderr.on('data', data => {

@@ -1,7 +1,8 @@
 import { Config, Destroy, Provide } from '@midwayjs/core';
-import { Browser, BrowserContext, chromium } from 'playwright';
+import { Browser, BrowserContext, Page, chromium } from 'playwright';
 import TurndownService = require('turndown');
 import gfm = require('turndown-plugin-gfm');
+import axios from 'axios';
 
 const turndownService = new TurndownService({
   headingStyle: 'atx',
@@ -524,6 +525,455 @@ function extractArticle() {
 }
 
 /**
+ * 把页面改造成「自包含」的：外链样式表内联成 <style>，CSS 与标签属性里的相对地址补成绝对地址，
+ * 最后把整份 DOM 序列化出来一起返回。
+ *
+ * 背景：page.content() 只是把 DOM 序列化出来，<link rel="stylesheet"> 这类外链样式表、
+ * 以及 /xxx 这种根相对地址都不会被带上，html 一旦离开原站点（保存成本地文件、丢给
+ * html_to_pdf/html_to_doc 用 setContent 渲染）就会掉样式。
+ *
+ * 之所以放在浏览器里做而不是服务端后处理：只有浏览器能读到 document.styleSheets 的
+ * cssRules（包含 JS 动态注入的样式、以及已经摊平的 @import）。
+ *
+ * 之所以连序列化也放在这里，而不是内联完再 page.content()：React 会把被摘掉的样式表
+ * <link> 重新挂回 <head>（实抓目标页面时踩到过，<head> 里又冒出一个根相对的 <link>）；
+ * 清理和序列化在同一个 evaluate（同一个 JS task）里完成，中间不给框架插入的机会。
+ * 顺带一提 documentElement.outerHTML 不含 doctype，缺了会让浏览器退化成怪异模式，所以补上。
+ *
+ * 注意：这个函数会被 page.evaluate 序列化后丢进页面执行，不能引用模块作用域里的任何变量。
+ * 返回值里的 pending 是「跨域样式表」的 id + 地址——跨域样式表读 cssRules 会抛 SecurityError，
+ * 只能由服务端再抓一次兜底（调用方抓回来之后再调一次本函数）。
+ */
+function inlinePageAssets(): { html: string; pending: string[] } {
+  const base = document.baseURI;
+  const absolutize = (value: string): string => {
+    const url = (value || '').trim();
+    // 空值 / 已有协议（http:、data:、mailto:…）/ 纯锚点，都不动
+    if (!url || /^[a-z][a-z0-9+.-]*:/i.test(url) || url.charAt(0) === '#') {
+      return value;
+    }
+    try {
+      return new URL(url, base).href;
+    } catch (error) {
+      return value;
+    }
+  };
+  const fixCssUrls = (css: string): string =>
+    css.replace(
+      /url\((\s*['"]?)([^'")]+)\1\s*\)/gi,
+      (matched: string, quote: string, raw: string) => {
+        const fixed = absolutize(raw);
+        return fixed === raw ? matched : `url(${quote}${fixed}${quote})`;
+      }
+    );
+  /**
+   * 递归收集样式表内容；type === 3 是 CSSRule.IMPORT_RULE，
+   * 它的规则挂在 styleSheet 上，直接收 styleSheet 就等于把 @import 展开了。
+   */
+  const readSheet = (sheet: CSSStyleSheet | null): string => {
+    if (!sheet) {
+      return '';
+    }
+    return Array.from(sheet.cssRules).reduce((css: string, rule: CSSRule) => {
+      const imported = (rule as CSSImportRule).styleSheet;
+      if (rule.type === 3 && imported) {
+        return css + readSheet(imported as CSSStyleSheet);
+      }
+      return css + rule.cssText + '\n';
+    }, '');
+  };
+
+  const pending: string[] = [];
+  Array.from(
+    document.querySelectorAll<HTMLLinkElement>('link[rel~="stylesheet"]')
+  ).forEach((link, index) => {
+    const href = link.href;
+    let css = '';
+    try {
+      css = readSheet(link.sheet);
+    } catch (error) {
+      css = '';
+    }
+    if (!css) {
+      const id = `pending-${index}`;
+      link.setAttribute('data-inline-pending', id);
+      pending.push(`${id}\t${href}`);
+      return;
+    }
+    const style = document.createElement('style');
+    style.setAttribute('data-inlined-from', href);
+    style.textContent = fixCssUrls(css);
+    link.replaceWith(style);
+  });
+
+  // 页面自己注入的 <style>（antd 的 cssinjs、@font-face 等）里的相对地址同样要补
+  Array.from(document.querySelectorAll('style')).forEach(style => {
+    const css = style.textContent;
+    if (css) {
+      style.textContent = fixCssUrls(css);
+    }
+  });
+
+  // 标签属性上的相对地址：图片、脚本、图标、srcset 候选列表等
+  Array.from(
+    document.querySelectorAll(
+      '[href],[src],[poster],[data-src],[srcset],[data-srcset]'
+    )
+  ).forEach(node => {
+    ['href', 'src', 'poster', 'data-src'].forEach(attr => {
+      const value = node.getAttribute(attr);
+      if (value) {
+        node.setAttribute(attr, absolutize(value));
+      }
+    });
+    ['srcset', 'data-srcset'].forEach(attr => {
+      const value = node.getAttribute(attr);
+      if (!value) {
+        return;
+      }
+      node.setAttribute(
+        attr,
+        value
+          .split(',')
+          .map(candidate => {
+            // srcset 是「地址 + 宽度/倍率描述符」的列表，只动地址那一段
+            const parts = candidate.trim().split(/\s+/);
+            return [absolutize(parts[0]), ...parts.slice(1)].join(' ');
+          })
+          .join(', ')
+      );
+    });
+  });
+
+  /**
+   * 返回的是静态快照，不再需要任何脚本：全删。
+   * 留着只会带来副作用——框架水合会再改 DOM（把刚内联掉的样式表以根相对 <link> 挂回来）、
+   * Next.js 调试浮层被重新插回来，和我们的改动互相打架。
+   * 和序列化放在同一个 task 里删，中间不给框架插回去的机会。
+   */
+  document
+    .querySelectorAll('script, nextjs-portal')
+    .forEach(node => node.remove());
+
+  let doctype = '';
+  if (document.doctype) {
+    try {
+      doctype = new XMLSerializer().serializeToString(document.doctype);
+    } catch (error) {
+      doctype = '<!DOCTYPE html>';
+    }
+  }
+
+  return { html: doctype + document.documentElement.outerHTML, pending };
+}
+
+/**
+ * CSS 里的相对 url()（@font-face 字体、背景图等）补成绝对地址，基准是这份 CSS 自己的地址。
+ */
+export const absolutizeCssUrls = (css: string, base: string): string => {
+  return (css || '').replace(
+    /url\((\s*['"]?)([^'")]+)\1\s*\)/gi,
+    (matched: string, quote: string, raw: string) => {
+      const url = (raw || '').trim();
+      if (!url || /^[a-z][a-z0-9+.-]*:/i.test(url) || url.charAt(0) === '#') {
+        return matched;
+      }
+      try {
+        return `url(${quote}${new URL(url, base).href}${quote})`;
+      } catch (error) {
+        return matched;
+      }
+    }
+  );
+};
+
+/**
+ * 等页面「安静」下来再抓：连续 quietMs 没有 DOM 变更（head 里插 <style>、文本渲染都算）
+ * 就认为定型，最多等 maxMs。
+ *
+ * 为什么需要：这类 SPA 的样式/内容常在 load 之后才补齐 —— antd 的 cssinjs 是在客户端
+ * 把组件样式 prepend 进 <head> 的，load 一到就序列化会时有时无地漏掉这整块样式
+ * （实抓目标页面时 7 次里有约一半的 html 没有这部分 <style>），离线打开就少一块。
+ */
+async function waitForDomSettle(page: Page, quietMs = 300, maxMs = 2000) {
+  await page.evaluate(
+    ({ quiet, hard }) =>
+      new Promise<void>(resolve => {
+        let timer = setTimeout(finish, quiet);
+        const cap = setTimeout(finish, hard);
+        const observer = new MutationObserver(() => {
+          clearTimeout(timer);
+          timer = setTimeout(finish, quiet);
+        });
+        function finish() {
+          clearTimeout(timer);
+          clearTimeout(cap);
+          observer.disconnect();
+          resolve();
+        }
+        observer.observe(document.documentElement, {
+          childList: true,
+          subtree: true,
+          characterData: true,
+        });
+      }),
+    { quiet: quietMs, hard: maxMs }
+  );
+}
+
+/**
+ * 服务端兜底：抓跨域样式表（浏览器读不到 cssRules 的那种），顺带展开它的 @import。
+ * 抓不到就让调用方保留原来的 <link>，至少不破坏页面。
+ */
+async function fetchCssSheet(href: string, depth = 0): Promise<string> {
+  if (depth >= 3) {
+    return '';
+  }
+  const res = await axios.get(href, {
+    responseType: 'text',
+    timeout: 15000,
+    // 有些 CDN 的 content-type 不是 text/css，别让 axios 把它当 JSON 解析
+    transformResponse: [data => data],
+  });
+  const css = typeof res.data === 'string' ? res.data : String(res.data);
+
+  const pattern =
+    /@import\s+(?:url\(\s*(['"]?)([^'")]+)\1\s*\)|(['"])([^'"]+)\3)\s*([^;]*);/gi;
+  let out = '';
+  let cursor = 0;
+  let match: RegExpExecArray | null = pattern.exec(css);
+  while (match) {
+    out += css.slice(cursor, match.index);
+    cursor = match.index + match[0].length;
+    // 带 media 的 @import 有额外语义，原样保留
+    if ((match[5] || '').trim()) {
+      out += match[0];
+    } else {
+      try {
+        const importedUrl = new URL(match[2] || match[4], href).href;
+        out += await fetchCssSheet(importedUrl, depth + 1);
+      } catch (error) {
+        out += match[0];
+      }
+    }
+    match = pattern.exec(css);
+  }
+  return absolutizeCssUrls(out + css.slice(cursor), href);
+}
+
+/** 单张图片内联上限：5MB（指图片原始字节，base64 后约放大 1/3） */
+const DEFAULT_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+/** 整页图片内联总上限：20MB，超出后剩下的图片保留绝对地址 */
+const DEFAULT_MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
+
+/**
+ * 从 srcset 里挑一个候选地址：优先「最大宽度 / 最大倍率」，都没有描述符就取最后一个。
+ * 静态快照只需要一个确定的分辨率，多份 base64 只是浪费体积。
+ */
+export const pickSrcsetCandidate = (srcset: string): string => {
+  const candidates = (srcset || '')
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean);
+  const pick = (pattern: RegExp, weight: (value: string) => number) => {
+    let best = '';
+    let bestScore = -1;
+    candidates.forEach(item => {
+      const parts = item.split(/\s+/);
+      const matched = pattern.exec((parts[1] || '').toLowerCase());
+      if (!matched) {
+        return;
+      }
+      const score = weight(matched[1]);
+      if (score >= bestScore) {
+        bestScore = score;
+        best = parts[0];
+      }
+    });
+    return best;
+  };
+  // 宽度描述符（384w）优先，其次倍率（2x），都没有描述符就取最后一个候选
+  const last = candidates.length
+    ? candidates[candidates.length - 1].split(/\s+/)[0]
+    : '';
+  return pick(/^(\d+)w$/, Number) || pick(/^([\d.]+)x$/, Number) || last;
+};
+
+/** 响应头不可信时按魔数嗅探图片类型 */
+export const sniffImageMime = (body: Buffer): string => {
+  if (!body || body.length < 4) {
+    return '';
+  }
+  if (body[0] === 0xff && body[1] === 0xd8) {
+    return 'image/jpeg';
+  }
+  if (body.slice(0, 8).toString('hex') === '89504e470d0a1a0a') {
+    return 'image/png';
+  }
+  if (body.slice(0, 4).toString('ascii') === 'GIF8') {
+    return 'image/gif';
+  }
+  if (
+    body.slice(0, 4).toString('ascii') === 'RIFF' &&
+    body.slice(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  if (
+    /^(avif|avis|heic|heif|mif1|msf1)$/.test(
+      body.slice(8, 12).toString('ascii')
+    )
+  ) {
+    return 'image/avif';
+  }
+  if (body.slice(0, 4).toString('hex') === '00000100') {
+    return 'image/x-icon';
+  }
+  if (body.slice(0, 2).toString('ascii') === 'BM') {
+    return 'image/bmp';
+  }
+  const head = body.slice(0, 300).toString('utf8').trim().toLowerCase();
+  if (
+    head.startsWith('<svg') ||
+    (head.startsWith('<?xml') && head.indexOf('<svg') > -1)
+  ) {
+    return 'image/svg+xml';
+  }
+  return '';
+};
+
+/** 字体之类的地址不用白跑一趟 */
+const looksLikeNonImage = (url: string) =>
+  /\.(woff2?|ttf|otf|eot|css|js|mjs|json)([?#]|$)/i.test(url);
+
+/**
+ * 把 html 里的图片抓成 data URI（base64），覆盖 `<img>/<source>` 的 src、srcset 与
+ * `<style>` 里的 url()（字体除外）。
+ *
+ * 失败 / 超限 / 判定不是图片 → 保留原地址，接口整体不失败。
+ * 注意：内联后 `<img>` 会去掉 srcset（同一个 data URI 没必要多份）和 loading="lazy"。
+ */
+async function inlineImagesInHtml(
+  html: string,
+  fetchImage: (url: string) => Promise<{ mime: string; body: Buffer } | null>,
+  options: { maxImageBytes: number; maxTotalImageBytes: number }
+): Promise<{ html: string; inlined: number; skipped: number }> {
+  const candidates = new Set<string>();
+  const addCandidate = (url: string) => {
+    const value = (url || '').trim();
+    if (value && !value.startsWith('data:') && !looksLikeNonImage(value)) {
+      candidates.add(value);
+    }
+  };
+
+  const imageTags: string[] = html.match(/<(?:img|source)\b[^>]*>/gi) || [];
+  imageTags.forEach(tag => {
+    const src = (tag.match(/\ssrc="([^"]*)"/i) || [])[1];
+    if (src) {
+      addCandidate(src);
+    }
+    const srcset = (tag.match(/\ssrcset="([^"]*)"/i) || [])[1];
+    if (srcset) {
+      srcset
+        .split(',')
+        .forEach(item => addCandidate(item.trim().split(/\s+/)[0]));
+    }
+  });
+
+  const styleBlocks: string[] =
+    html.match(/<style\b[^>]*>[\s\S]*?<\/style>/gi) || [];
+  styleBlocks.forEach(block => {
+    const pattern = /url\((\s*['"]?)([^'")]+)\1\s*\)/gi;
+    let match = pattern.exec(block);
+    while (match) {
+      addCandidate(match[2]);
+      match = pattern.exec(block);
+    }
+  });
+
+  const dataUris = new Map<string, string>();
+  let totalBytes = 0;
+  const list = Array.from(candidates);
+  // 限并发 4：图片多的时候别把目标站点打爆
+  for (let i = 0; i < list.length; i += 4) {
+    const chunk = list.slice(i, i + 4);
+    const results = await Promise.all(
+      chunk.map(async url => {
+        try {
+          const image = await fetchImage(url);
+          if (!image || image.body.length > options.maxImageBytes) {
+            return { url, dataUri: '' };
+          }
+          return {
+            url,
+            dataUri: `data:${image.mime};base64,${image.body.toString(
+              'base64'
+            )}`,
+            size: image.body.length,
+          };
+        } catch (error) {
+          return { url, dataUri: '', size: 0 };
+        }
+      })
+    );
+    results.forEach(result => {
+      if (!result.dataUri) {
+        return;
+      }
+      // 总量超限就停止内联，剩下的保留原地址
+      if (totalBytes + (result.size || 0) > options.maxTotalImageBytes) {
+        return;
+      }
+      totalBytes += result.size || 0;
+      dataUris.set(result.url, result.dataUri);
+    });
+  }
+
+  let inlined = 0;
+  const replaceTag = (tag: string) => {
+    const isSource = /^<source\b/i.test(tag);
+    const srcset = (tag.match(/\ssrcset="([^"]*)"/i) || [])[1];
+    const candidateFromSrcset = srcset ? pickSrcsetCandidate(srcset) : '';
+    const src = (tag.match(/\ssrc="([^"]*)"/i) || [])[1];
+    // srcset 才是浏览器实际用的那份（Next.js Image 的 src 常常只是小图），优先它
+    const preferred = dataUris.has(candidateFromSrcset)
+      ? candidateFromSrcset
+      : dataUris.has(src)
+      ? src
+      : '';
+    if (!preferred) {
+      return tag;
+    }
+    const dataUri = dataUris.get(preferred) as string;
+    inlined++;
+    let next = tag;
+    if (isSource) {
+      return next.replace(/\ssrcset="[^"]*"/i, ` srcset="${dataUri}"`);
+    }
+    next = next.replace(/\ssrc="[^"]*"/i, ` src="${dataUri}"`);
+    if (srcset) {
+      next = next.replace(/\ssrcset="[^"]*"/i, '');
+    }
+    return next.replace(/\sloading="[^"]*"/i, '');
+  };
+  html = html.replace(/<(?:img|source)\b[^>]*>/gi, replaceTag);
+
+  if (dataUris.size) {
+    html = html.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, block =>
+      block.replace(
+        /url\((\s*['"]?)([^'")]+)\1\s*\)/gi,
+        (matched: string, quote: string, raw: string) => {
+          const dataUri = dataUris.get(raw.trim());
+          return dataUri ? `url(${quote}${dataUri}${quote})` : matched;
+        }
+      )
+    );
+  }
+
+  return { html, inlined, skipped: candidates.size - dataUris.size };
+}
+
+/**
  * 无头浏览器抓取：列表页 / 文章页 / 图片下载
  */
 @Provide()
@@ -571,7 +1021,7 @@ export class PlaywrightService {
   private async openContext(): Promise<BrowserContext> {
     try {
       this.browser = await this.launch();
-    } catch (e) {
+    } catch (e:any) {
       // 受限沙箱（容器 / CI）里 chromium 多进程启动可能被拒绝，降级单进程再试一次
       console.warn(
         '[eduNews] chromium 常规模式启动失败，降级 single-process 重试：',
@@ -632,6 +1082,157 @@ export class PlaywrightService {
         },
       });
       return Buffer.from(pdf);
+    } finally {
+      await page.close().catch(() => null);
+    }
+  }
+
+  /**
+   * 打开一个 URL，等页面 onload 之后，返回完整 HTML 与整页截图的 base64
+   * @param url 目标地址，仅支持 http/https
+   * @param options.fullPage 是否整页截图（true 时截取整个滚动区域），默认 true
+   * @param options.width 视口宽度，默认沿用共享上下文的 1440
+   * @param options.height 视口高度，默认沿用共享上下文的 900
+   * @param options.waitUntil 等待时机，默认 load（即 onload）
+   */
+  async capturePage(
+    url: string,
+    options: {
+      fullPage?: boolean;
+      width?: number;
+      height?: number;
+      waitUntil?: 'load' | 'domcontentloaded' | 'networkidle';
+      /** 是否把图片内联成 base64，默认 true */
+      inlineImage?: boolean;
+      /** 单张图片上限（原始字节），默认 5MB */
+      maxImageBytes?: number;
+      /** 图片内联总量上限（原始字节），默认 20MB */
+      maxTotalImageBytes?: number;
+    } = {}
+  ): Promise<{ url: string; html: string; screenshot: string }> {
+    const target = (url || '').trim();
+    if (!/^https?:\/\//i.test(target)) {
+      throw new Error('url is invalid');
+    }
+    const context = await this.getContext();
+    const page = await context.newPage();
+    try {
+      if (options.width || options.height) {
+        await page.setViewportSize({
+          width: options.width || 1440,
+          height: options.height || 900,
+        });
+      }
+      await page.goto(target, {
+        waitUntil: options.waitUntil || 'load',
+        timeout: this.timeout,
+      });
+      // load 之后 SPA 还在继续渲染（样式、数据），等 DOM 安静下来再抓，避免拿到半成品
+      await waitForDomSettle(page);
+      /**
+       * 摘掉「不属于页面内容」的节点：
+       * - [class~="print:hidden"]：Tailwind 的打印隐藏约定（页脚、按钮条等），这些是
+       *   只在屏幕上出现的 chrome，不属于要交付的页面内容；
+       * - script[data-nextjs-dev-overlay] / nextjs-portal：Next.js 开发模式的调试浮层，
+       *   只有 dev server 会注入，抓下来就是一段多余标记（还会在截图里画出调试徽标）。
+       * 目标是 SPA 时，load 之后框架还会继续渲染、把这些节点重新插回来，
+       * 所以先删一遍再挂 MutationObserver 持续清理，保证 content() / screenshot() 拿到的是干净页面。
+       */
+      await page.evaluate(() => {
+        const selector =
+          '[class~="print:hidden"], script[data-nextjs-dev-overlay], nextjs-portal';
+        const strip = () => {
+          document.querySelectorAll(selector).forEach(node => node.remove());
+        };
+        strip();
+        new MutationObserver(strip).observe(document.documentElement, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['class'],
+        });
+      });
+      /**
+       * 把样式内联、相对地址绝对化，并直接拿到序列化后的 html，让返回的 html 脱离原站点也能正常渲染。
+       * 跨域样式表浏览器读不到 cssRules，退回服务端抓一次，抓回来再跑一遍（这一遍的结果才是最终 html）。
+       */
+      let prepared = await page.evaluate(inlinePageAssets);
+      if (prepared.pending.length) {
+        const inlined: Array<[string, string]> = [];
+        for (const item of prepared.pending) {
+          const [id, href] = item.split('\t');
+          try {
+            inlined.push([id, await fetchCssSheet(href)]);
+          } catch (error) {
+            // 抓不到就留着原 <link>，不做进一步处理
+          }
+        }
+        if (inlined.length) {
+          await page.evaluate((sheets: Array<[string, string]>) => {
+            sheets.forEach(([id, css]) => {
+              const link = document.querySelector(
+                `[data-inline-pending="${id}"]`
+              );
+              if (!link) {
+                return;
+              }
+              const style = document.createElement('style');
+              style.setAttribute(
+                'data-inlined-from',
+                link.getAttribute('href') || ''
+              );
+              style.textContent = css;
+              link.replaceWith(style);
+            });
+          }, inlined);
+          prepared = await page.evaluate(inlinePageAssets);
+        }
+      }
+      /**
+       * 图片内联成 base64：走共享 context 的 request，自带 cookie / referer，
+       * 抓不到的、超限的一律保留绝对地址。
+       */
+      let html = prepared.html;
+      if (options.inlineImage !== false) {
+        const result = await inlineImagesInHtml(
+          html,
+          async imageUrl => {
+            const response = await context.request.get(imageUrl, {
+              timeout: this.timeout,
+            });
+            if (!response.ok()) {
+              return null;
+            }
+            const body = await response.body();
+            const headerMime = String(response.headers()['content-type'] || '')
+              .split(';')[0]
+              .trim()
+              .toLowerCase();
+            const mime = /^image\//.test(headerMime)
+              ? headerMime
+              : sniffImageMime(body);
+            if (!/^image\//.test(mime)) {
+              return null;
+            }
+            return { mime, body };
+          },
+          {
+            maxImageBytes: options.maxImageBytes || DEFAULT_MAX_IMAGE_BYTES,
+            maxTotalImageBytes:
+              options.maxTotalImageBytes || DEFAULT_MAX_TOTAL_IMAGE_BYTES,
+          }
+        );
+        html = result.html;
+      }
+      const shot = await page.screenshot({
+        fullPage: options.fullPage !== false,
+        type: 'png',
+      });
+      return {
+        url: target,
+        html,
+        screenshot: Buffer.from(shot).toString('base64'),
+      };
     } finally {
       await page.close().catch(() => null);
     }

@@ -37,3 +37,9 @@ export const FILE_EXPEND_2_FILE_COUNT_LIMIT: TUserCountLimitField =
 
 export const FILE_TEXT_2_WORD_COUNT_LIMIT: TUserCountLimitField =
   'count_text_2_word_limit';
+
+/**
+ * ai_subject_store 出题结果的保存时长：24 小时。
+ * 由 AiSubjectStoreTask 每小时清理一次过期数据。
+ */
+export const AI_SUBJECT_STORE_TTL = 24 * 60 * 60 * 1000;

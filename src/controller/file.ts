@@ -118,9 +118,6 @@ export class FileController {
 
   @Post('/upload')
   async uploadFile(@Files() files: any[], @Fields() fields: any) {
-    console.log({
-      fields,
-    });
     if (!files || files.length === 0) {
       throw new Error('file_is_empty');
     }
@@ -168,7 +165,7 @@ export class FileController {
     const lane = fields?.lane || this.ctx.request.body?.lane || LANE.WHALE;
     const fileUrl = fields?.file_url || this.ctx.request.body?.file_url;
     const data = files ? readFileSync(join(files[0].data)) : null;
-    
+
     switch (action) {
       case 'clear_hands_write': {
         if (!data) {
@@ -428,6 +425,35 @@ export class FileController {
   }
 
   /**
+   * base64 图片直接转存到 OSS
+   * {
+   *  "base64": "data:image/png;base64,..."
+   * }
+   * 上传位置：pub/base64_convert/<时间戳>_<随机数>.png
+   */
+  @Post('/base64_to_image')
+  async base64ToImage() {
+    const userId = this.ctx.get('x-user-id');
+    if (!userId) {
+      throw new Error('userId is required');
+    }
+    const base64 = this.ctx.request.body?.base64;
+    if (!base64) {
+      throw new Error('base64 is empty');
+    }
+    const buffer = base64ToBuffer(base64);
+    const fileName = `pub/base64_convert/${Date.now()}_${
+      Math.random() * 100
+    }.png`;
+    await this.ossService.uploadStream({
+      stream: Stream.Readable.from(buffer),
+      fileName: fileName,
+      forbidOverride: 'true',
+    });
+    return fileName;
+  }
+
+  /**
    * HTML 转 PDF
    * {
    *  "html": "<h1>标题</h1><p>正文</p>",
@@ -451,17 +477,39 @@ export class FileController {
 
   /**
    * HTML 转 Word（.docx）
+   *
+   * 请求体：
    * {
-   *  "html": "<h1>标题</h1><p>正文</p>"
+   *  "html": "<h1>标题</h1><p>正文</p>",
+   *  "toStrategy": "regural" | "pdfkit-convert",  // 可选，默认 regural
+   *  "lane": "whale"                              // 可选
    * }
+   *
+   * toStrategy 两种取值：
+   * - regural：常规策略，html-docxjs-compiler 把 HTML 解析成 docx 元素，稳定、产物可编辑
+   * - pdfkit-convert：HTML 先渲染成 PDF，再把 PDF 每页转成图片塞进 docx，保真但偶发报错
+   *
+   * 调用示例（x-user-id 必填）：
+   *   # 常规策略
+   *   curl -X POST 'http://localhost:7001/api/file/html_to_doc' \
+   *     -H 'Content-Type: application/json' -H 'x-user-id: <openid>' \
+   *     -d '{"html":"<h1>标题</h1><p>正文</p>","toStrategy":"regural"}'
+   *
+   *   # PDF 保真策略
+   *   curl -X POST 'http://localhost:7001/api/file/html_to_doc' \
+   *     -H 'Content-Type: application/json' -H 'x-user-id: <openid>' \
+   *     -d '{"html":"<h1>标题</h1><p>正文</p>","toStrategy":"pdfkit-convert"}'
+   *
+   * 返回：{ "status": 200, "data": "pub/<时间戳>_<随机数>.docx" }
    */
   @Post('/html_to_doc', {
     middleware: [ConvertFileLimitMiddleware],
   })
   async htmlToDoc() {
+    const strategy = this.ctx.request.body.toStrategy || 'regural';
     return this.htmlToFile({
       ext: 'docx',
-      build: html => this.fileService.htmlToDoc(html),
+      build: html => this.fileService.htmlToDoc(html, strategy),
     });
   }
 
