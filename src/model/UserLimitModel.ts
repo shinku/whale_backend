@@ -30,7 +30,7 @@ export class UserLimitModel extends Model {
     type: DataType.STRING,
     allowNull: false,
     comment:
-      '限制类型：count_clear_hands_write_limit / count_convert_file_limit / count_expend_2_file_limit / count_text_2_word_limit / time_date',
+      '限制类型：count_clear_hands_write_limit / count_convert_file_limit / count_expend_2_file_limit / count_error_collect_limit / count_text_2_word_limit / time_date',
   })
   limit_type!: string;
 

@@ -11,6 +11,7 @@ export const USER_COUNT_LIMIT_FIELDS = [
   'count_clear_hands_write_limit',
   'count_convert_file_limit',
   'count_expend_2_file_limit',
+  'count_error_collect_limit',
   'count_text_2_word_limit',
 ] as const;
 
@@ -34,6 +35,9 @@ export const FILE_UPLOAD_ACTION_COUNT_LIMIT: Record<
 
 export const FILE_EXPEND_2_FILE_COUNT_LIMIT: TUserCountLimitField =
   'count_expend_2_file_limit';
+
+export const FILE_ERROR_COLLECT_COUNT_LIMIT: TUserCountLimitField =
+  'count_error_collect_limit';
 
 export const FILE_TEXT_2_WORD_COUNT_LIMIT: TUserCountLimitField =
   'count_text_2_word_limit';

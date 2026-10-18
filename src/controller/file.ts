@@ -24,14 +24,17 @@ import { PassThrough, Stream } from 'stream';
 import { LANE } from '../core/enums';
 import {
   FILE_EXPEND_2_FILE_COUNT_LIMIT,
+  FILE_ERROR_COLLECT_COUNT_LIMIT,
   FILE_TEXT_2_WORD_COUNT_LIMIT,
   FILE_UPLOAD_ACTION_COUNT_LIMIT,
 } from '../core/limits';
 import { ClearHandsWriteLimitMiddleware } from '../middleware/clearHandsWriteLimit';
 import { ConvertFileLimitMiddleware } from '../middleware/convertFileLimit';
+import { ErrorCollectLimitMiddleware } from '../middleware/errorCollectLimit';
 import { Expend2FileLimitMiddleware } from '../middleware/expend2FileLimit';
 import { Text2WordLimitMiddleware } from '../middleware/text2WordLimit';
 import { UserRecordModel } from '../model/UserRecord';
+import { ErrorCollectService } from '../service/ErrorCollectService';
 import { FileService } from '../service/FileService';
 import { ImageService } from '../service/ImageService';
 import { OssService } from '../service/OssService';
@@ -95,6 +98,9 @@ export class FileController {
 
   @Inject()
   fileService!: FileService;
+
+  @Inject()
+  errorCollectService!: ErrorCollectService;
 
   @Inject()
   userService!: UserService;
@@ -277,6 +283,32 @@ export class FileController {
       }
     );
     return result.data?.showapi_res_body?.answer;
+  }
+
+  /**
+   * 天壤智能试卷题目检测 / 错题收集
+   * {
+   *  "media_id": "data:image/png;base64,..."
+   * }
+   */
+  @Post('/error_collect', {
+    middleware: [ErrorCollectLimitMiddleware],
+  })
+  async errorCollect() {
+    const userId = this.ctx.get('x-user-id');
+    if (!userId) {
+      throw new Error('userId is required');
+    }
+    const lane = this.ctx.request.body?.lane || LANE.WHALE;
+    const result = await this.errorCollectService.collect(
+      this.ctx.request.body?.media_id
+    );
+    await this.userService.consumeCountLimit(
+      userId,
+      lane,
+      FILE_ERROR_COLLECT_COUNT_LIMIT
+    );
+    return result;
   }
 
   /**
