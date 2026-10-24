@@ -66,8 +66,29 @@
 - 参数：
   - query.limit: 每页数量，默认20
   - query.offset: 偏移量，默认0
+- 响应中的会员字段：
+  - vip_type: 最近一笔已支付订单的会员类型；无订单时为 `guest`
+  - vip_name: 套餐名称
+  - vip_order_no: 最近一笔有效购买订单号，管理员退款时使用
+  - available_start: 会员生效时间
+  - available_end: 会员结束时间
+  - vip_active: 当前是否在有效期内
 
 ### GET /user/:userid
 - 描述：获取用户详情
 - 参数：
-  - params.userid: 用户ID
+  - params.userid: 用户 openid
+- 响应会员字段与用户列表一致。
+
+### POST /vip/refund/:openid
+- 描述：退款指定用户最新一笔仍有效的购买记录
+- 参数：
+  - params.openid: 用户 openid
+  - body.orderNo: 待退款订单号，必须与当前最新有效订单一致
+  - body.reason: 退款原因，可选
+  - header.x-operator-id: 后台操作人，可选
+- 限制：
+  - 只能全额退款最新一笔 `PAID` 且未过期的订单
+  - 退款处理中不能再次购买
+  - 退款成功后将订单改为 `REFUNDED`，会员信息自动回退到上一笔仍有效的订单
+  - 完全相同的重复退款请求返回原退款单，不会重复退款

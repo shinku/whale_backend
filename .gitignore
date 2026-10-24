@@ -15,3 +15,5 @@ output
 config.local.ts
 */config/config.json
 .env
+certs/*
+!certs/README.md

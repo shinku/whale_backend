@@ -1,6 +1,7 @@
 import { Config, Provide } from '@midwayjs/core';
 import axios from 'axios';
 import * as crypto from 'crypto';
+import { BusinessError } from '../core/errors';
 export const APIS = {
   Jscode2session: 'https://api.weixin.qq.com/sns/jscode2session',
 };
@@ -13,10 +14,38 @@ export class WehchatApiService {
     appsecret: string;
   };
   async getBaseUserInfo(token: string) {
-    const result = await axios.get(
-      `${APIS.Jscode2session}?js_code=${token}&appid=${this.config.appid}&secret=${this.config.appsecret}&grant_type=authorization_code`
-    );
-    return result.data;
+    return this.exchangeLoginCode(token);
+  }
+
+  async exchangeLoginCode(code: string) {
+    if (!code || typeof code !== 'string') {
+      throw new BusinessError('微信登录 code 不能为空');
+    }
+    if (!this.config?.appid || !this.config?.appsecret) {
+      throw new BusinessError('微信小程序登录未配置', 503);
+    }
+    let result;
+    try {
+      result = await axios.get(APIS.Jscode2session, {
+        params: {
+          js_code: code,
+          appid: this.config.appid,
+          secret: this.config.appsecret,
+          grant_type: 'authorization_code',
+        },
+        timeout: 10000,
+      });
+    } catch {
+      throw new BusinessError('微信登录服务暂时不可用', 503);
+    }
+    const data = result.data || {};
+    if (data.errcode || !data.openid || !data.session_key) {
+      console.warn('[wechatLogin] login failed', {
+        errcode: data.errcode || 'INVALID_RESPONSE',
+      });
+      throw new BusinessError('微信登录失败，请重试', 401);
+    }
+    return data;
   }
 
   async decryptPhoneNumber(sessionKey, encryptedData, iv) {

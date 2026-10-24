@@ -53,6 +53,7 @@ export class user {
     });
     const amount = await this.pointerService.userInitialization(openid);
     const vipInfo = await this.vipService.userVipInitializatin(openid);
+    const vip = await this.vipService.getVipInfo(openid);
     // 新用户 / 历史空字段用户初始化 countlimit 剩余次数
     const countLimitInfo = await this.userService.initializeUserCountLimits(
       openid,
@@ -64,6 +65,7 @@ export class user {
       data: {
         ...record,
         ...vipInfo,
+        vip,
         amount,
         ...countLimitInfo,
         session_key,
@@ -115,7 +117,8 @@ export class user {
       agree: true,
       reject: false,
     };
-    record.agree_first_deal = agreeFirstDeal[deal as keyof typeof agreeFirstDeal] ;
+    record.agree_first_deal =
+      agreeFirstDeal[deal as keyof typeof agreeFirstDeal];
     await record.save();
     return 'done';
   }

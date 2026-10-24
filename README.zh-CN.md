@@ -69,6 +69,10 @@ MYSQL_IMAGE=docker.m.daocloud.io/library/mysql:8.0
   | `user_point` | `UserPoint` |
   | `user_point_consume_logs` | `UserPointConsumeLogs` |
   | `user_vip_record` | `UserVipModel` |
+  | `vip_plan` | `VipPlanModel` |
+  | `vip_order` | `VipOrderModel` |
+  | `vip_transaction` | `VipTransactionModel` |
+  | `vip_refund` | `VipRefundModel` |
   | `user_record_cleanpaper_image` | `UserRecord` |
   | `user_feedback` | `UserFeedBack` |
   | `user_limit_table` | `UserLimitModel` |
