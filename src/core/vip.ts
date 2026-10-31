@@ -3,21 +3,10 @@ export const VIP_MEMBER_TYPES = [
   'monthly',
   'quarterly',
   'yearly',
+  'infinity',
 ] as const;
 
 export type VipMemberType = (typeof VIP_MEMBER_TYPES)[number];
-
-/**
- * vip / svip 是历史会员类型，保留兼容读取；新订单只会写入
- * monthly / quarterly / yearly。
- */
-export const ACTIVE_MEMBER_TYPES = [
-  'vip',
-  'svip',
-  'monthly',
-  'quarterly',
-  'yearly',
-] as const;
 
 export const VIP_ORDER_STATUS = {
   CREATING: 'CREATING',
@@ -26,6 +15,7 @@ export const VIP_ORDER_STATUS = {
   CLOSED: 'CLOSED',
   FAILED: 'FAILED',
   REFUNDED: 'REFUNDED',
+  GRANTED: 'GRANTED',
 } as const;
 
 export type VipOrderStatus =
@@ -82,16 +72,55 @@ export const VIP_PLAN_DEFINITIONS = [
   },
 ] as const;
 
+export const VIRTUAL_PAY_VIP_PRODUCTS = {
+  vip_9_9: {
+    productId: 'vip_9_9',
+    name: '月卡会员',
+    memberType: 'monthly',
+    durationDays: 30,
+    priceCents: 990,
+  },
+  vip_28_8: {
+    productId: 'vip_28_8',
+    name: '季卡会员',
+    memberType: 'quarterly',
+    durationDays: 90,
+    priceCents: 2880,
+  },
+  vip_68: {
+    productId: 'vip_68',
+    name: '年卡会员',
+    memberType: 'yearly',
+    durationDays: 365,
+    priceCents: 6780,
+  },
+} as const;
+
+export type VipVirtualPayProductId = keyof typeof VIRTUAL_PAY_VIP_PRODUCTS;
+
 export const DAY_MILLISECONDS = 24 * 60 * 60 * 1000;
 
 export function isVipMemberType(value: string): value is VipMemberType {
   return VIP_MEMBER_TYPES.includes(value as VipMemberType);
 }
 
-export function isActiveMemberType(value: string): boolean {
-  return ACTIVE_MEMBER_TYPES.includes(
-    value as (typeof ACTIVE_MEMBER_TYPES)[number]
-  );
+/**
+ * 会员是否有效只看到期时间。available_end 为空表示永不过期。
+ */
+export function isMembershipActive(
+  availableEnd: Date | string | number | null | undefined,
+  now = new Date()
+) {
+  const end = toDate(availableEnd);
+  return end === null || end.getTime() > now.getTime();
+}
+
+export function isVipActive(
+  type: string,
+  availableEnd: Date | string | number | null | undefined,
+  now = new Date()
+) {
+  return type === 'infinity' || isMembershipActive(availableEnd, now);
 }
 
 export function toDate(value: Date | string | number | null | undefined) {
@@ -111,8 +140,13 @@ export function calculateMembershipExtension(
 ) {
   const end = toDate(availableEnd);
   const start = toDate(availableStart);
-  const active =
-    isActiveMemberType(type) && end !== null && end.getTime() > now.getTime();
+  if (type === 'infinity') {
+    return {
+      membershipStart: start || now,
+      membershipEnd: null,
+    };
+  }
+  const active = end !== null && end.getTime() > now.getTime();
   const baseTime = active ? end.getTime() : now.getTime();
   const membershipStart = active && start ? start : now;
   return {

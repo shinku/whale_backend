@@ -66,14 +66,15 @@ CREATE TABLE IF NOT EXISTS `vip_plan` (
 
 CREATE TABLE IF NOT EXISTS `vip_order` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `order_no` varchar(32) NOT NULL,
+  `order_no` varchar(32) DEFAULT NULL
+    COMMENT '微信 out_trade_no；guest/infinity 授予记录为空',
   `user_id` varchar(64) NOT NULL COMMENT '用户 openid',
   `plan_id` varchar(32) NOT NULL,
   `plan_snapshot` json NOT NULL COMMENT '下单时的套餐名称、价格、时长、会员类型快照',
   `amount_cents` int unsigned NOT NULL,
   `currency` char(3) NOT NULL DEFAULT 'CNY',
   `status` varchar(20) NOT NULL DEFAULT 'CREATING'
-    COMMENT 'CREATING|PENDING|PAID|CLOSED|FAILED|REFUNDED',
+    COMMENT 'CREATING|PENDING|PAID|CLOSED|FAILED|REFUNDED|GRANTED',
   `prepay_id` varchar(64) DEFAULT NULL,
   `transaction_id` varchar(64) DEFAULT NULL,
   `paid_at` datetime DEFAULT NULL,
@@ -88,7 +89,14 @@ CREATE TABLE IF NOT EXISTS `vip_order` (
   UNIQUE KEY `uk_vip_order_transaction_id` (`transaction_id`),
   KEY `idx_vip_order_user_status_created` (`user_id`, `status`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-  COMMENT='会员购买订单，order_no 同时作为微信 out_trade_no';
+  COMMENT='会员订单及 guest/infinity 授予记录';
+
+-- 兼容已经提前执行过 vip_order 建表的情况。
+ALTER TABLE `vip_order`
+  MODIFY `order_no` varchar(32) DEFAULT NULL
+    COMMENT '微信 out_trade_no；guest/infinity 授予记录为空',
+  MODIFY `status` varchar(20) NOT NULL DEFAULT 'CREATING'
+    COMMENT 'CREATING|PENDING|PAID|CLOSED|FAILED|REFUNDED|GRANTED';
 
 CREATE TABLE IF NOT EXISTS `vip_transaction` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
@@ -278,7 +286,7 @@ CREATE TABLE IF NOT EXISTS `wechat_message_push_record` (
 -- ALTER TABLE `user_vip_record`
 --   MODIFY `user_id` varchar(255) NOT NULL,
 --   MODIFY `type` varchar(20) NOT NULL
---     COMMENT 'guest|monthly|quarterly|yearly，兼容历史 vip|svip',
+--     COMMENT 'guest|monthly|quarterly|yearly|infinity，兼容历史 vip|svip',
 --   MODIFY `available_start` datetime NOT NULL COMMENT '会员生效时间',
 --   MODIFY `createdAt` datetime NOT NULL,
 --   MODIFY `updatedAt` datetime NOT NULL;

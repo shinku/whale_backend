@@ -2,6 +2,7 @@ import { Get, Inject, Post, Provide } from '@midwayjs/core';
 import { randomUUID } from 'crypto';
 import { Context } from 'egg';
 import { AI_SUBJECT_STORE_TTL } from '../core/limits';
+import { VipCheckMiddleware } from '../middleware/vipCheck';
 import { AiSubjectStoreModel } from '../model/AiSubjectStoreModel';
 import { AIService } from '../service/AiService';
 import { PromptService } from '../service/PromptService';
@@ -22,7 +23,7 @@ export class Ai {
   @Get('/activity')
   async getActivityList() {
     return {
-      data: await this.promptService.getPromptList()
+      data: await this.promptService.getPromptList(),
     };
   }
 
@@ -32,7 +33,7 @@ export class Ai {
   @Post('/activity')
   async getActivity() {
     const { actId, config, prompt } = this.ctx.request.body;
-    const systemPrompt = prompt || await this.promptService.getPrompt(actId);
+    const systemPrompt = prompt || (await this.promptService.getPrompt(actId));
     return this.aiService.chatWithDeepSeek(
       JSON.stringify(config),
       systemPrompt
@@ -45,13 +46,15 @@ export class Ai {
    * 每次调用生成一个唯一 requestid，结果落库 ai_subject_store（有效期 24 小时），
    * 返回值同时带上 requestid，前端可凭它通过 GET /api/ai/subjects 复查结果。
    */
-  @Post('/subjects')
+  @Post('/subjects', {
+    middleware: [VipCheckMiddleware],
+  })
   async getSubjects() {
-    const {config, prompt } = this.ctx.request.body;
+    const { config, prompt } = this.ctx.request.body;
     if (!config || !prompt) {
       throw new Error('config and prompt are required');
     }
-    const systemPrompt = prompt
+    const systemPrompt = prompt;
     const requestid = randomUUID();
     const content = await this.aiService.chatWithDeepSeek(
       JSON.stringify(config),

@@ -54,10 +54,20 @@ URL 查询参数包含 `timestamp`、`nonce`、`encrypt_type=aes` 和 `msg_signa
 
 - `xpay_goods_deliver_notify`：解析 `OpenId`、`OutTradeNo`、`Env`、
   `WeChatPayInfo` 和 `GoodsInfo`，其中 `ProductId`、`Quantity`、`OpenId` 会组成
-  `VipPurchaseEvent` 并调用 `onVipPurchaseEvent` hook。
+  `VipPurchaseEvent`，更新用户 VIP 记录，并生成对应的 `vip_order` 和
+  `vip_transaction`。
 
-VIP 套餐映射、订单确认和权益幂等发放仍需后续确认，目前 hook 不直接开通会员。
-后续实现应基于 `OutTradeNo` 保证幂等。
+道具映射：
+
+| ProductId  | 会员类型         |   时长 |    标价 |
+| ---------- | ---------------- | -----: | ------: |
+| `vip_9_9`  | 月卡 `monthly`   |  30 天 |  9.9 元 |
+| `vip_28_8` | 季卡 `quarterly` |  90 天 | 28.8 元 |
+| `vip_68`   | 年卡 `yearly`    | 365 天 | 67.8 元 |
+
+`Quantity` 会乘以套餐时长。有效会员从当前到期时间继续延长，失效会员从支付时间
+开始计算。`OutTradeNo` 优先读取事件顶层字段，也兼容
+`GoodsInfo.OutTradeNo`，并作为本地 `vip_order.order_no`；重复推送不会重复发放。
 
 ## 配置
 

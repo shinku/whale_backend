@@ -18,9 +18,9 @@ describe('WechatEventHandle', () => {
       .spyOn(WechatMessagePushRecordModel, 'create')
       .mockResolvedValue(record as any);
     const handler = new WechatEventHandle();
-    const vipHook = jest
-      .spyOn(handler as any, 'onVipPurchaseEvent')
-      .mockResolvedValue(undefined);
+    handler.vipService = {
+      applyVirtualPayPurchase: jest.fn().mockResolvedValue(undefined),
+    } as any;
     const message = {
       ToUserName: 'gh_original',
       FromUserName: 'wx_official_openid',
@@ -54,7 +54,7 @@ describe('WechatEventHandle', () => {
       content: JSON.stringify(message, null, 2),
       status: 'RECEIVED',
     });
-    expect(vipHook).toHaveBeenCalledWith({
+    expect(handler.vipService.applyVirtualPayPurchase).toHaveBeenCalledWith({
       openid: 'user-openid',
       productId: 'month',
       quantity: 1,
@@ -89,6 +89,39 @@ describe('WechatEventHandle', () => {
     });
 
     expect(record.update).toHaveBeenCalledWith({ status: 'IGNORED' });
+  });
+
+  it('falls back to GoodsInfo.OutTradeNo from the callback', async () => {
+    const record = createRecord();
+    jest
+      .spyOn(WechatMessagePushRecordModel, 'create')
+      .mockResolvedValue(record as any);
+    const handler = new WechatEventHandle();
+    handler.vipService = {
+      applyVirtualPayPurchase: jest.fn().mockResolvedValue(undefined),
+    } as any;
+
+    await handler.handle({
+      Event: 'xpay_goods_deliver_notify',
+      OpenId: 'openid-1',
+      Env: 0,
+      GoodsInfo: {
+        ProductId: 'vip_9_9',
+        Quantity: 1,
+        OutTradeNo: 'VP_FROM_GOODS',
+      },
+    });
+
+    expect(WechatMessagePushRecordModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        out_trade_no: 'VP_FROM_GOODS',
+      })
+    );
+    expect(handler.vipService.applyVirtualPayPurchase).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outTradeNo: 'VP_FROM_GOODS',
+      })
+    );
   });
 
   it('records failed xpay events and propagates the error', async () => {

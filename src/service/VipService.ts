@@ -4,18 +4,22 @@ import { Op, Transaction } from 'sequelize';
 import { BusinessError } from '../core/errors';
 import {
   calculateMembershipExtension,
-  isActiveMemberType,
+  isVipActive,
   isVipMemberType,
   VIP_ORDER_STATUS,
   VIP_PLAN_DEFINITIONS,
   VIP_REFUND_STATUS,
+  VIRTUAL_PAY_VIP_PRODUCTS,
   VipMemberType,
+  VipVirtualPayProductId,
 } from '../core/vip';
 import { UserVipModel } from '../model/UserVipModel';
+import { UserModel } from '../model/UserModel';
 import { VipOrderModel } from '../model/VipOrderModel';
 import { VipPlanModel } from '../model/VipPlanModel';
 import { VipRefundModel } from '../model/VipRefundModel';
 import { VipTransactionModel } from '../model/VipTransactionModel';
+import { DEFAULT_EXTRA_CONFIG, ExtraConfigService } from './ExtraConfigService';
 import { WxPayService, WxRefundResource, WxTransaction } from './WxPayService';
 
 interface PlanSnapshot {
@@ -24,9 +28,23 @@ interface PlanSnapshot {
   memberType: VipMemberType;
   durationDays: number;
   priceCents: number;
+  quantity?: number;
 }
 
-const GUEST_VALIDITY_DAYS = 7;
+export interface VirtualPayVipPurchase {
+  openid: string;
+  productId: string;
+  quantity: number;
+  outTradeNo: string;
+  env: 0 | 1;
+  paidTime?: number;
+  originalPrice?: number;
+  actualPrice?: number;
+  attach?: string;
+  mchOrderNo?: string;
+  transactionId?: string;
+}
+
 const DUPLICATE_ORDER_WINDOW_MS = 10 * 1000;
 const ACTIVE_QUERY_DELAY_MS = 3 * 1000;
 const ORDER_CLOSE_AFTER_MS = 2 * 60 * 60 * 1000;
@@ -36,11 +54,23 @@ const PLAN_MEMBER_TYPES: Record<string, string> = {
   quarter: 'quarterly',
   year: 'yearly',
 };
+const VIP_TYPE_NAMES: Record<string, string> = {
+  guest: '体验会员',
+  monthly: '月卡会员',
+  quarterly: '季卡会员',
+  yearly: '年卡会员',
+  infinity: '永久会员',
+  vip: '会员',
+  svip: '会员',
+};
 
 @Provide()
 export class VipService {
   @Inject()
   wxPayService!: WxPayService;
+
+  @Inject()
+  extraConfigService!: ExtraConfigService;
 
   async ensureDefaultPlans() {
     await VipPlanModel.bulkCreate(
@@ -78,7 +108,28 @@ export class VipService {
   }
 
   async userVipInitializatin(openid: string) {
+    const extraConfig =
+      this.extraConfigService?.getConfig() || DEFAULT_EXTRA_CONFIG;
+    if (!extraConfig.guestVipInitialization) {
+      const existing = await UserVipModel.findOne({
+        where: {
+          user_id: openid,
+        },
+      });
+      if (existing) {
+        return this.toVipInfo(existing);
+      }
+      return {
+        type: 'guest',
+        name: '体验会员',
+        active: false,
+        available_start: null,
+        available_end: null,
+      };
+    }
+
     const now = new Date();
+    const guestValidityDays = extraConfig.guestValidityDays;
     const [record] = await UserVipModel.findOrCreate({
       where: {
         user_id: openid,
@@ -88,18 +139,33 @@ export class VipService {
         type: 'guest',
         available_start: now,
         available_end: new Date(
-          now.getTime() + GUEST_VALIDITY_DAYS * 24 * 60 * 60 * 1000
+          now.getTime() + guestValidityDays * 24 * 60 * 60 * 1000
         ),
       },
     });
+    if (record.type === 'guest') {
+      await this.ensureGuestMembershipOrder(record, guestValidityDays);
+    }
     return this.toVipInfo(record, now);
   }
 
   async getVipInfo(openid: string) {
+    const currentVip = await UserVipModel.findOne({
+      attributes: ['type', 'available_start', 'available_end'],
+      where: {
+        user_id: openid,
+      },
+      raw: true,
+    });
+    if (currentVip?.type === 'infinity') {
+      return [this.toVipInfo(currentVip as unknown as UserVipModel)];
+    }
     const orders = await VipOrderModel.findAll({
       where: {
         user_id: openid,
-        status: VIP_ORDER_STATUS.PAID,
+        status: {
+          [Op.in]: [VIP_ORDER_STATUS.PAID, VIP_ORDER_STATUS.GRANTED],
+        },
       },
       order: [
         ['paid_at', 'DESC'],
@@ -596,6 +662,305 @@ export class VipService {
     await record.save();
   }
 
+  /**
+   * infinity 只能由受控的特殊路径调用，不能通过购买道具获得。
+   */
+  async grantInfinityVip(openid: string) {
+    const now = new Date();
+    const user = await UserModel.findOne({
+      attributes: ['openid'],
+      where: {
+        openid,
+      },
+    });
+    if (!user) {
+      throw new BusinessError('用户不存在', 404);
+    }
+    const [record] = await UserVipModel.findOrCreate({
+      where: {
+        user_id: openid,
+      },
+      defaults: {
+        user_id: openid,
+        type: 'infinity',
+        available_start: now,
+        available_end: null,
+      },
+    });
+    record.type = 'infinity';
+    record.available_start = record.available_start || now;
+    record.available_end = null;
+    await record.save();
+    await VipOrderModel.findOrCreate({
+      where: {
+        user_id: openid,
+        plan_id: 'infinity',
+        status: VIP_ORDER_STATUS.GRANTED,
+      },
+      defaults: {
+        order_no: null,
+        user_id: openid,
+        plan_id: 'infinity',
+        plan_snapshot: {
+          planId: 'infinity',
+          name: '永久会员',
+          memberType: 'infinity',
+          durationDays: null,
+          priceCents: 0,
+          grantSource: 'special',
+        },
+        amount_cents: 0,
+        currency: 'CNY',
+        status: VIP_ORDER_STATUS.GRANTED,
+        membership_start_at: record.available_start,
+        membership_end_at: null,
+      },
+    });
+    return this.toVipInfo(record, now);
+  }
+
+  async applyVirtualPayPurchase(input: VirtualPayVipPurchase) {
+    const product =
+      VIRTUAL_PAY_VIP_PRODUCTS[input.productId as VipVirtualPayProductId];
+    if (!product) {
+      throw new BusinessError('虚拟支付道具映射不存在', 400);
+    }
+    if (
+      !Number.isSafeInteger(input.quantity) ||
+      input.quantity <= 0 ||
+      !Number.isSafeInteger(product.durationDays * input.quantity)
+    ) {
+      throw new BusinessError('虚拟支付道具数量无效', 400);
+    }
+
+    const dbTransaction = await VipOrderModel.sequelize.transaction();
+    try {
+      const [order, created] = await VipOrderModel.findOrCreate({
+        where: {
+          order_no: input.outTradeNo,
+        },
+        defaults: {
+          order_no: input.outTradeNo,
+          user_id: input.openid,
+          plan_id: product.productId,
+          plan_snapshot: {
+            planId: product.productId,
+            name: product.name,
+            memberType: product.memberType,
+            durationDays: product.durationDays,
+            priceCents: product.priceCents,
+            quantity: input.quantity,
+          },
+          amount_cents: this.getVirtualPayAmount(input, product.priceCents),
+          currency: 'CNY',
+          status: VIP_ORDER_STATUS.PENDING,
+        },
+        transaction: dbTransaction,
+      });
+      if (
+        order.user_id !== input.openid ||
+        order.plan_id !== product.productId
+      ) {
+        throw new BusinessError('虚拟支付订单与用户或道具不匹配', 400);
+      }
+      if (order.status === VIP_ORDER_STATUS.PAID) {
+        await dbTransaction.commit();
+        return order;
+      }
+      if (
+        !created &&
+        ![VIP_ORDER_STATUS.CREATING, VIP_ORDER_STATUS.PENDING].includes(
+          order.status as any
+        )
+      ) {
+        throw new BusinessError('虚拟支付订单状态不允许入账', 500);
+      }
+
+      await order.reload({
+        transaction: dbTransaction,
+        lock: true,
+      });
+      if (order.status === VIP_ORDER_STATUS.PAID) {
+        await dbTransaction.commit();
+        return order;
+      }
+
+      const [vipRecord] = await UserVipModel.findOrCreate({
+        where: {
+          user_id: input.openid,
+        },
+        defaults: {
+          user_id: input.openid,
+          type: 'guest',
+          available_start: new Date(),
+          available_end: new Date(),
+        },
+        transaction: dbTransaction,
+      });
+      await vipRecord.reload({
+        transaction: dbTransaction,
+        lock: true,
+      });
+      const previousOrder = await VipOrderModel.findOne({
+        where: {
+          user_id: input.openid,
+          status: VIP_ORDER_STATUS.PAID,
+        },
+        order: [
+          ['paid_at', 'DESC'],
+          ['id', 'DESC'],
+        ],
+        transaction: dbTransaction,
+        lock: true,
+      });
+      const previousSnapshot = previousOrder
+        ? this.parsePlanSnapshot(previousOrder.plan_snapshot)
+        : {};
+      const previousMemberType =
+        typeof previousSnapshot.memberType === 'string'
+          ? previousSnapshot.memberType
+          : vipRecord.type;
+      const previousStart = previousOrder?.membership_start_at
+        ? new Date(previousOrder.membership_start_at)
+        : vipRecord.available_start;
+      const previousEnd = previousOrder?.membership_end_at
+        ? new Date(previousOrder.membership_end_at)
+        : vipRecord.available_end;
+      const now = new Date();
+      const isInfinity = vipRecord.type === 'infinity';
+      const extension = isInfinity
+        ? {
+            membershipStart: previousStart || now,
+            membershipEnd: null,
+          }
+        : calculateMembershipExtension(
+            previousMemberType,
+            previousStart,
+            previousEnd,
+            product.durationDays * input.quantity,
+            now
+          );
+      const paidAt = this.getVirtualPayPaidAt(input.paidTime, now);
+      const transactionId =
+        input.transactionId || `XPAY-${input.outTradeNo}`.slice(0, 64);
+
+      await vipRecord.update(
+        {
+          type: isInfinity ? 'infinity' : product.memberType,
+          available_start: extension.membershipStart,
+          available_end: extension.membershipEnd,
+        },
+        {
+          transaction: dbTransaction,
+        }
+      );
+      await order.update(
+        {
+          status: VIP_ORDER_STATUS.PAID,
+          transaction_id: transactionId,
+          paid_at: paidAt,
+          membership_start_at: extension.membershipStart,
+          membership_end_at: extension.membershipEnd,
+          last_wx_error_code: null,
+        },
+        {
+          transaction: dbTransaction,
+        }
+      );
+      await VipTransactionModel.findOrCreate({
+        where: {
+          order_no: input.outTradeNo,
+        },
+        defaults: {
+          order_no: input.outTradeNo,
+          user_id: input.openid,
+          transaction_id: transactionId,
+          trade_state: 'SUCCESS',
+          amount_cents: Number(order.amount_cents),
+          currency: 'CNY',
+          source: 'VIRTUAL_PAY',
+          payload_summary: {
+            productId: product.productId,
+            quantity: input.quantity,
+            env: input.env,
+            outTradeNo: input.outTradeNo,
+            transactionId,
+            mchOrderNo: input.mchOrderNo || null,
+            originalPrice: input.originalPrice || null,
+            actualPrice: input.actualPrice || null,
+            attach: input.attach || null,
+            paidTime: input.paidTime || null,
+          },
+          paid_at: paidAt,
+        },
+        transaction: dbTransaction,
+      });
+      await dbTransaction.commit();
+      return order;
+    } catch (error) {
+      await dbTransaction.rollback();
+      throw error;
+    }
+  }
+
+  private getVirtualPayAmount(
+    input: VirtualPayVipPurchase,
+    unitPriceCents: number
+  ) {
+    const amount =
+      typeof input.actualPrice === 'number' &&
+      Number.isSafeInteger(input.actualPrice) &&
+      input.actualPrice > 0
+        ? input.actualPrice
+        : unitPriceCents * input.quantity;
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      throw new BusinessError('虚拟支付金额无效', 400);
+    }
+    return amount;
+  }
+
+  private getVirtualPayPaidAt(paidTime: number | undefined, now: Date) {
+    if (paidTime === undefined) {
+      return now;
+    }
+    const paidAt = new Date(paidTime * 1000);
+    if (Number.isNaN(paidAt.getTime())) {
+      throw new BusinessError('虚拟支付时间格式错误', 400);
+    }
+    return paidAt;
+  }
+
+  private async ensureGuestMembershipOrder(
+    record: UserVipModel,
+    guestValidityDays: number
+  ) {
+    await VipOrderModel.findOrCreate({
+      where: {
+        user_id: record.user_id,
+        plan_id: 'guest',
+        status: VIP_ORDER_STATUS.GRANTED,
+      },
+      defaults: {
+        order_no: null,
+        user_id: record.user_id,
+        plan_id: 'guest',
+        plan_snapshot: {
+          planId: 'guest',
+          name: '体验会员',
+          memberType: 'guest',
+          durationDays: guestValidityDays,
+          priceCents: 0,
+          grantSource: 'signup',
+        },
+        amount_cents: 0,
+        currency: 'CNY',
+        status: VIP_ORDER_STATUS.GRANTED,
+        membership_start_at: record.available_start,
+        membership_end_at: record.available_end,
+      },
+    });
+  }
+
   private async createLocalOrder(
     openid: string,
     snapshot: PlanSnapshot
@@ -743,13 +1108,19 @@ export class VipService {
       ? new Date(previousOrder.membership_end_at)
       : vipRecord.available_end;
     const now = new Date();
-    const extension = calculateMembershipExtension(
-      previousMemberType,
-      previousStart,
-      previousEnd,
-      Number(snapshot.durationDays),
-      now
-    );
+    const isInfinity = vipRecord.type === 'infinity';
+    const extension = isInfinity
+      ? {
+          membershipStart: previousStart || now,
+          membershipEnd: null,
+        }
+      : calculateMembershipExtension(
+          previousMemberType,
+          previousStart,
+          previousEnd,
+          Number(snapshot.durationDays),
+          now
+        );
     const paidAt = transaction.success_time
       ? new Date(transaction.success_time)
       : now;
@@ -759,7 +1130,7 @@ export class VipService {
 
     await vipRecord.update(
       {
-        type: snapshot.memberType,
+        type: isInfinity ? 'infinity' : snapshot.memberType,
         available_start: extension.membershipStart,
         available_end: extension.membershipEnd,
       },
@@ -924,6 +1295,9 @@ export class VipService {
       lock: true,
     });
 
+    if (vipRecord.type === 'infinity') {
+      return;
+    }
     if (!latestOrder) {
       const now = new Date();
       await vipRecord.update(
@@ -985,8 +1359,7 @@ export class VipService {
     return {
       type,
       name: String(snapshot.name || ''),
-      active:
-        isActiveMemberType(type) && end !== null && end.getTime() > Date.now(),
+      active: isVipActive(type, end),
       available_start: start,
       available_end: end,
     };
@@ -1067,12 +1440,10 @@ export class VipService {
 
   private toVipInfo(record: UserVipModel, now = new Date()) {
     const end = record.available_end ? new Date(record.available_end) : null;
-    const active =
-      isActiveMemberType(record.type) &&
-      end !== null &&
-      end.getTime() > now.getTime();
+    const active = isVipActive(record.type, end, now);
     return {
       type: record.type,
+      name: VIP_TYPE_NAMES[record.type] || '',
       active,
       available_start: record.available_start
         ? new Date(record.available_start)

@@ -1,9 +1,10 @@
-import { Get, Inject, Provide } from '@midwayjs/core';
+import { Get, Inject, Post, Provide } from '@midwayjs/core';
 import { Context } from 'egg';
 import { Op } from 'sequelize';
-import { isActiveMemberType } from '../../core/vip';
+import { isVipActive } from '../../core/vip';
 import { UserModel } from '../../model/UserModel';
 import { VipOrderModel } from '../../model/VipOrderModel';
+import { VipService } from '../../service/VipService';
 import { AdminApi } from '../api/Api';
 
 const PLAN_MEMBER_TYPES: Record<string, string> = {
@@ -17,6 +18,9 @@ const PLAN_MEMBER_TYPES: Record<string, string> = {
 export class UserController {
   @Inject()
   ctx!: Context;
+
+  @Inject()
+  vipService!: VipService;
 
   @Get('/')
   async getUsers() {
@@ -70,6 +74,17 @@ export class UserController {
     };
   }
 
+  /**
+   * 特殊路径：仅用于后台人工授予永久会员，不能通过购买道具获得。
+   */
+  @Post('/:userid/vip/infinity')
+  async grantInfinityVip() {
+    const { userid } = this.ctx.params;
+    return {
+      data: await this.vipService.grantInfinityVip(userid),
+    };
+  }
+
   private async attachVipInfo(users: Array<Record<string, any>>) {
     if (users.length === 0) {
       return [];
@@ -91,11 +106,13 @@ export class UserController {
         user_id: {
           [Op.in]: openids,
         },
-        status: 'PAID',
+        status: {
+          [Op.in]: ['PAID', 'GRANTED'],
+        },
       },
       order: [
-        ['membership_end_at', 'DESC'],
-        ['paid_at', 'DESC'],
+        ['created_at', 'DESC'],
+        ['id', 'DESC'],
       ],
       raw: true,
     });
@@ -133,7 +150,7 @@ export class UserController {
     const vipType = String(
       snapshot.memberType ||
         snapshot.member_type ||
-        PLAN_MEMBER_TYPES[order.plan_id] ||
+        PLAN_MEMBER_TYPES[order.plan_id || ''] ||
         'vip'
     );
     const start = order.membership_start_at
@@ -148,10 +165,7 @@ export class UserController {
       vip_order_no: order.order_no,
       available_start: start,
       available_end: end,
-      vip_active:
-        isActiveMemberType(vipType) &&
-        end !== null &&
-        end.getTime() > now.getTime(),
+      vip_active: isVipActive(vipType, end, now),
     };
   }
 

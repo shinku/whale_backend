@@ -22,24 +22,13 @@ import {
 import { join } from 'path';
 import { PassThrough, Stream } from 'stream';
 import { LANE } from '../core/enums';
-import {
-  FILE_EXPEND_2_FILE_COUNT_LIMIT,
-  FILE_ERROR_COLLECT_COUNT_LIMIT,
-  FILE_TEXT_2_WORD_COUNT_LIMIT,
-  FILE_UPLOAD_ACTION_COUNT_LIMIT,
-} from '../core/limits';
-import { ClearHandsWriteLimitMiddleware } from '../middleware/clearHandsWriteLimit';
-import { ConvertFileLimitMiddleware } from '../middleware/convertFileLimit';
-import { ErrorCollectLimitMiddleware } from '../middleware/errorCollectLimit';
-import { Expend2FileLimitMiddleware } from '../middleware/expend2FileLimit';
 import { FileRecordMiddleware } from '../middleware/fileRecord';
-import { Text2WordLimitMiddleware } from '../middleware/text2WordLimit';
+import { VipCheckMiddleware } from '../middleware/vipCheck';
 import { UserRecordModel } from '../model/UserRecord';
 import { ErrorCollectService } from '../service/ErrorCollectService';
 import { FileService } from '../service/FileService';
 import { ImageService } from '../service/ImageService';
 import { OssService } from '../service/OssService';
-import { UserService } from '../service/UserService';
 import Api from './api/Api';
 
 export type TActionType =
@@ -127,9 +116,6 @@ export class FileController {
   @Inject()
   errorCollectService!: ErrorCollectService;
 
-  @Inject()
-  userService!: UserService;
-
   @Get('/get/:bucketname/:filename')
   async accessFile(
     @Param('filename') filename: string,
@@ -148,7 +134,7 @@ export class FileController {
   ossService!: OssService;
 
   @Post('/upload')
-  async uploadFile(@Files() files: any[], @Fields() fields: any) {
+  async uploadFile(@Files() files: any[]) {
     if (!files || files.length === 0) {
       throw new Error('file_is_empty');
     }
@@ -165,7 +151,7 @@ export class FileController {
   }
 
   @Post('/upload/clear_hands_write', {
-    middleware: [ClearHandsWriteLimitMiddleware, FileRecordMiddleware],
+    middleware: [VipCheckMiddleware, FileRecordMiddleware],
   })
   async clearHandsWrite(
     @Files() files: any[],
@@ -175,7 +161,7 @@ export class FileController {
   }
 
   @Post('/upload/convert_file', {
-    middleware: [ConvertFileLimitMiddleware, FileRecordMiddleware],
+    middleware: [VipCheckMiddleware, FileRecordMiddleware],
   })
   async convertFile(
     @Files() files: any[],
@@ -193,7 +179,6 @@ export class FileController {
     if (!userId) {
       throw new Error('userId is required');
     }
-    const lane = fields?.lane || this.ctx.request.body?.lane || LANE.WHALE;
     const fileUrl = fields?.file_url || this.ctx.request.body?.file_url;
     const data = files ? readFileSync(join(files[0].data)) : null;
 
@@ -217,11 +202,6 @@ export class FileController {
           forbidOverride: 'true',
           folderName: 'pub/',
         });
-        await this.userService.consumeCountLimit(
-          userId,
-          lane,
-          FILE_UPLOAD_ACTION_COUNT_LIMIT.clear_hands_write
-        );
         return {
           file: 'pub/' + filename,
         };
@@ -235,11 +215,6 @@ export class FileController {
           fileUrl: fileUrl,
           userId,
         });
-        await this.userService.consumeCountLimit(
-          userId,
-          lane,
-          FILE_UPLOAD_ACTION_COUNT_LIMIT.convert_file
-        );
         return { file: result };
       }
     }
@@ -330,21 +305,11 @@ export class FileController {
    * }
    */
   @Post('/error_collect', {
-    middleware: [ErrorCollectLimitMiddleware, FileRecordMiddleware],
+    middleware: [VipCheckMiddleware, FileRecordMiddleware],
   })
   async errorCollect() {
-    const userId = this.ctx.get('x-user-id');
-    if (!userId) {
-      throw new Error('userId is required');
-    }
-    const lane = this.ctx.request.body?.lane || LANE.WHALE;
     const result = await this.errorCollectService.collect(
       this.ctx.request.body?.media_id
-    );
-    await this.userService.consumeCountLimit(
-      userId,
-      lane,
-      FILE_ERROR_COLLECT_COUNT_LIMIT
     );
     return result;
   }
@@ -356,17 +321,12 @@ export class FileController {
    * }
    */
   @Post('/expend_2_file', {
-    middleware: [Expend2FileLimitMiddleware, FileRecordMiddleware],
+    middleware: [VipCheckMiddleware, FileRecordMiddleware],
   })
   async doExpend2File() {
     /**
      * 基于request的file_urls参数
      */
-    const userId = this.ctx.get('x-user-id');
-    if (!userId) {
-      throw new Error('userId is required');
-    }
-    const lane = this.ctx.request.body?.lane || LANE.WHALE;
     const fileUrls = this.ctx.request.body.file_urls;
     const to_type = this.ctx.request.body.to_type || 'pdf';
     if (!fileUrls || fileUrls.length === 0) {
@@ -384,11 +344,6 @@ export class FileController {
           fileName: fileName,
           forbidOverride: 'true',
         });
-        await this.userService.consumeCountLimit(
-          userId,
-          lane,
-          FILE_EXPEND_2_FILE_COUNT_LIMIT
-        );
         return fileName;
       }
       case 'docx': {
@@ -415,11 +370,6 @@ export class FileController {
         unlink(docxPath, (...params) => {
           console.log('unlink pdf', params);
         });
-        await this.userService.consumeCountLimit(
-          userId,
-          lane,
-          FILE_EXPEND_2_FILE_COUNT_LIMIT
-        );
         return 'pub/' + docFileName;
         //return result;
       }
@@ -433,14 +383,9 @@ export class FileController {
    * }
    */
   @Post('/base64_to_pdf', {
-    middleware: [Expend2FileLimitMiddleware, FileRecordMiddleware],
+    middleware: [VipCheckMiddleware, FileRecordMiddleware],
   })
   async base64ToPdf() {
-    const userId = this.ctx.get('x-user-id');
-    if (!userId) {
-      throw new Error('userId is required');
-    }
-    const lane = this.ctx.request.body?.lane || LANE.WHALE;
     const base64List = this.ctx.request.body.base64_list;
     if (!base64List || base64List.length === 0) {
       throw new Error('base64_list is empty');
@@ -452,11 +397,6 @@ export class FileController {
       fileName: fileName,
       forbidOverride: 'true',
     });
-    await this.userService.consumeCountLimit(
-      userId,
-      lane,
-      FILE_EXPEND_2_FILE_COUNT_LIMIT
-    );
     return fileName;
   }
 
@@ -467,14 +407,9 @@ export class FileController {
    * }
    */
   @Post('/base64_to_word', {
-    middleware: [Expend2FileLimitMiddleware, FileRecordMiddleware],
+    middleware: [VipCheckMiddleware, FileRecordMiddleware],
   })
   async base64ToWord() {
-    const userId = this.ctx.get('x-user-id');
-    if (!userId) {
-      throw new Error('userId is required');
-    }
-    const lane = this.ctx.request.body?.lane || LANE.WHALE;
     const base64 = this.ctx.request.body.base64;
     if (!base64) {
       throw new Error('base64 is empty');
@@ -486,11 +421,6 @@ export class FileController {
       fileName: fileName,
       forbidOverride: 'true',
     });
-    await this.userService.consumeCountLimit(
-      userId,
-      lane,
-      FILE_EXPEND_2_FILE_COUNT_LIMIT
-    );
     return fileName;
   }
 
@@ -531,7 +461,7 @@ export class FileController {
    * }
    */
   @Post('/html_to_pdf', {
-    middleware: [ConvertFileLimitMiddleware, FileRecordMiddleware],
+    middleware: [FileRecordMiddleware],
   })
   async htmlToPdf() {
     return this.htmlToFile({
@@ -573,7 +503,7 @@ export class FileController {
    * 返回：{ "status": 200, "data": "pub/<时间戳>_<随机数>.docx" }
    */
   @Post('/html_to_doc', {
-    middleware: [ConvertFileLimitMiddleware, FileRecordMiddleware],
+    middleware: [FileRecordMiddleware],
   })
   async htmlToDoc() {
     const strategy = this.ctx.request.body.toStrategy || 'regural';
@@ -593,11 +523,6 @@ export class FileController {
     ext: 'pdf' | 'docx';
     build: (html: string) => Buffer | Promise<Buffer>;
   }) {
-    const userId = this.ctx.get('x-user-id');
-    if (!userId) {
-      throw new Error('userId is required');
-    }
-    const lane = this.ctx.request.body?.lane || LANE.WHALE;
     const html = this.ctx.request.body.html;
     if (!html) {
       throw new Error('html is empty');
@@ -609,11 +534,6 @@ export class FileController {
       fileName: fileName,
       forbidOverride: 'true',
     });
-    await this.userService.consumeCountLimit(
-      userId,
-      lane,
-      FILE_UPLOAD_ACTION_COUNT_LIMIT.convert_file
-    );
     return fileName;
   }
 
@@ -631,14 +551,9 @@ export class FileController {
     });
   }*/
   @Post('/text_2_word', {
-    middleware: [Text2WordLimitMiddleware, FileRecordMiddleware],
+    middleware: [VipCheckMiddleware, FileRecordMiddleware],
   })
   async text2Word() {
-    const userId = this.ctx.get('x-user-id');
-    if (!userId) {
-      throw new Error('userId is required');
-    }
-    const lane = this.ctx.request.body?.lane || LANE.WHALE;
     const text = this.ctx.request.body.text;
     console.log('text', text);
     if (!text) {
@@ -663,11 +578,6 @@ export class FileController {
     unlink(docxPath, (...params) => {
       console.log('unlink pdf', params);
     });
-    await this.userService.consumeCountLimit(
-      userId,
-      lane,
-      FILE_TEXT_2_WORD_COUNT_LIMIT
-    );
     return 'pub/' + docFileName;
   }
 

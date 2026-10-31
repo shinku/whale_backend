@@ -1,6 +1,7 @@
-import { Provide } from '@midwayjs/core';
+import { Inject, Provide } from '@midwayjs/core';
 import { BusinessError } from '../../core/errors';
 import { WechatMessagePushRecordModel } from '../../model/WechatMessagePushRecordModel';
+import { VipService } from '../VipService';
 
 type WechatMessage = Record<string, any>;
 
@@ -28,14 +29,21 @@ type MessageEventHandler = (
 
 @Provide()
 export class WechatEventHandle {
+  @Inject()
+  vipService!: VipService;
+
   async handle(message: WechatMessage) {
     const eventName = this.optionalString(message.Event);
+    const goodsInfo = this.optionalObject(message.GoodsInfo);
+    const outTradeNo =
+      this.optionalString(message.OutTradeNo) ||
+      this.optionalString(goodsInfo?.OutTradeNo);
     const record = await WechatMessagePushRecordModel.create({
       event_name: eventName,
       openid:
         this.optionalString(message.OpenId) ||
         this.optionalString(message.FromUserName),
-      out_trade_no: this.optionalString(message.OutTradeNo),
+      out_trade_no: outTradeNo,
       env: this.optionalEnv(message.Env),
       content: JSON.stringify(message, null, 2),
       status: 'RECEIVED',
@@ -83,7 +91,10 @@ export class WechatEventHandle {
         goodsInfo.Quantity,
         'GoodsInfo.Quantity'
       ),
-      outTradeNo: this.requireString(message.OutTradeNo, 'OutTradeNo'),
+      outTradeNo: this.requireString(
+        message.OutTradeNo,
+        'OutTradeNo'
+      ),
       env: this.requireEnv(message.Env),
       paidTime: this.optionalNumber(wechatPayInfo?.PaidTime),
       originalPrice: this.optionalNumber(goodsInfo.OrigPrice),
@@ -97,12 +108,8 @@ export class WechatEventHandle {
     return { vipPurchase: event };
   }
 
-  /**
-   * VIP 套餐映射、订单确认和权益幂等发放尚未确定。
-   * 后续应基于 outTradeNo 实现幂等处理。
-   */
   protected async onVipPurchaseEvent(event: VipPurchaseEvent) {
-    void event;
+    await this.vipService.applyVirtualPayPurchase(event);
   }
 
   private requireObject(value: unknown, field: string) {

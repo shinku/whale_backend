@@ -7,15 +7,21 @@
 
 服务首次读取套餐或首次下单时会幂等写入默认配置，不会覆盖后台已经修改过的行。
 
-| 套餐 ID | 名称 | 会员类型 | 有效天数 | 售价 |
-| --- | --- | --- | ---: | ---: |
-| `month` | 月卡会员 | `monthly` | 30 | 990 分（9.9 元） |
-| `quarter` | 季卡会员 | `quarterly` | 90 | 2880 分（28.8 元） |
-| `year` | 年卡会员 | `yearly` | 365 | 6800 分（68 元） |
+| 套餐 ID   | 名称     | 会员类型    | 有效天数 |               售价 |
+| --------- | -------- | ----------- | -------: | -----------------: |
+| `month`   | 月卡会员 | `monthly`   |       30 |   990 分（9.9 元） |
+| `quarter` | 季卡会员 | `quarterly` |       90 | 2880 分（28.8 元） |
+| `year`    | 年卡会员 | `yearly`    |      365 |   6800 分（68 元） |
 
-`user_vip_record.type` 的新值为 `guest | monthly | quarterly | yearly`。
+`user_vip_record.type` 的新值为 `guest | monthly | quarterly | yearly | infinity`。
 历史数据中的 `vip` 和 `svip` 仍可读取并参与有效期判断，下单成功后类型会更新为
 对应套餐的新类型。
+
+首次登录会创建 `guest` 会员，默认有效期为 3 天。`infinity` 只能通过后台特殊路径
+授予，不能通过购买道具获得，其 `available_end` 为 `NULL`。
+
+VIP 全局开关和 guest 初始化参数从 `/config/extra_config.json` 动态读取，详见
+[额外业务配置](./extra-config.md)。
 
 ## 2. 登录
 
@@ -65,12 +71,12 @@ token 使用 `AUTH_TOKEN_SECRET` 做 HMAC-SHA256 签名并带过期时间。生�
 
 以下接口均要求 bearer token 和支付专用限流中间件。
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| `GET` | `/api/vip/plans` | 按 `sort` 返回当前可售套餐 |
-| `GET` | `/api/vip/info` | 返回当前登录用户所有仍在有效期内的会员记录数组 |
-| `POST` | `/api/vip/orders` | 使用服务端套餐价格创建微信 JSAPI 订单 |
-| `GET` | `/api/vip/orders/{orderNo}` | 查询当前登录用户自己的订单 |
+| 方法   | 路径                        | 说明                                           |
+| ------ | --------------------------- | ---------------------------------------------- |
+| `GET`  | `/api/vip/plans`            | 按 `sort` 返回当前可售套餐                     |
+| `GET`  | `/api/vip/info`             | 返回当前登录用户所有仍在有效期内的会员记录数组 |
+| `POST` | `/api/vip/orders`           | 使用服务端套餐价格创建微信 JSAPI 订单          |
+| `GET`  | `/api/vip/orders/{orderNo}` | 查询当前登录用户自己的订单                     |
 
 ### 获取会员信息
 
@@ -101,6 +107,10 @@ token 使用 `AUTH_TOKEN_SECRET` 做 HMAC-SHA256 签名并带过期时间。生�
 
 兼容接口 `GET /api/user/:token` 也新增 `vip` 数组，内容与上述会员记录一致；
 原有 `type`、`available_start`、`available_end` 汇总字段继续保留。
+
+会员是否有效只判断 `available_end`：到期时间晚于当前时间，或到期时间为 `NULL`，
+都视为有效。`infinity` 类型无论到期字段是什么都直接视为有效，并且用户会员列表
+只返回这一条 infinity 记录。
 
 ### 创建订单
 
@@ -226,6 +236,10 @@ POST /admin/vip/refund/{openid}
 保存 `order_no`、openid、套餐快照、金额、订单状态、`prepay_id`、微信交易号、
 支付时间、本次权益起止时间和最近一次脱敏微信错误码。
 
+虚拟支付的回调订单号使用 `OutTradeNo`，兼容取顶部字段或
+`GoodsInfo.OutTradeNo`。`guest` 和 `infinity` 也写入该表并使用 `GRANTED` 状态，
+两者的 `order_no` 可以为空。
+
 ### `vip_transaction`
 
 每个已支付订单一条交易结果记录，保存微信交易号、交易状态、金额、来源
@@ -257,20 +271,20 @@ new_end   = max(now, 原 available_end) + 套餐快照天数
 
 将商户私钥和平台证书只读挂载到 `certs/`。真实 PEM 文件不会提交到仓库。
 
-| 环境变量 | 说明 |
-| --- | --- |
-| `AUTH_TOKEN_SECRET` | 登录 token 签名密钥 |
-| `AUTH_TOKEN_TTL_SECONDS` | token 有效期，默认 7200 秒 |
-| `WX_APP_ID` | 小程序 AppID |
-| `WX_APP_SECRET` | 小程序登录 Secret |
-| `WX_PAY_APP_ID` | 微信支付绑定的 AppID |
-| `WX_PAY_MCH_ID` | 商户号 |
-| `WX_PAY_MCH_SERIAL_NO` | 商户 API 证书序列号 |
-| `WX_PAY_PRIVATE_KEY_PATH` | 商户私钥 PEM 路径 |
-| `WX_PAY_API_V3_KEY` | 32 字节 API v3 密钥 |
-| `WX_PAY_NOTIFY_URL` | 公网 HTTPS 回调地址 |
-| `WX_PAY_PLATFORM_CERT_PATH` | 微信支付平台证书 PEM 路径 |
-| `WX_PAY_PLATFORM_SERIAL_NO` | 可选，平台证书序列号 |
+| 环境变量                    | 说明                       |
+| --------------------------- | -------------------------- |
+| `AUTH_TOKEN_SECRET`         | 登录 token 签名密钥        |
+| `AUTH_TOKEN_TTL_SECONDS`    | token 有效期，默认 7200 秒 |
+| `WX_APP_ID`                 | 小程序 AppID               |
+| `WX_APP_SECRET`             | 小程序登录 Secret          |
+| `WX_PAY_APP_ID`             | 微信支付绑定的 AppID       |
+| `WX_PAY_MCH_ID`             | 商户号                     |
+| `WX_PAY_MCH_SERIAL_NO`      | 商户 API 证书序列号        |
+| `WX_PAY_PRIVATE_KEY_PATH`   | 商户私钥 PEM 路径          |
+| `WX_PAY_API_V3_KEY`         | 32 字节 API v3 密钥        |
+| `WX_PAY_NOTIFY_URL`         | 公网 HTTPS 回调地址        |
+| `WX_PAY_PLATFORM_CERT_PATH` | 微信支付平台证书 PEM 路径  |
+| `WX_PAY_PLATFORM_SERIAL_NO` | 可选，平台证书序列号       |
 
 本地可参考 `.env.example`。应用不会自动加载 `.env`，本地启动前可执行：
 

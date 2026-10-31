@@ -18,15 +18,15 @@
 
 前端拿到 `requestid` 后，可通过 `GET /api/ai/subjects?requestid=xxx` 再次取回这次的结果。
 
-| 项 | 说明 |
-| --- | --- |
-| 请求方式 | `POST` |
-| 请求路径 | `/api/ai/subjects` |
-| Content-Type | `application/json` |
-| 鉴权 | 无（该路由未挂鉴权中间件） |
-| 响应格式 | `application/json; charset=utf-8` |
-| 是否流式 | 否，一次性返回完整结果 |
-| 服务端超时 | 未单独设置，取决于 DeepSeek 应答（固定 `max_tokens=2048`） |
+| 项           | 说明                                                       |
+| ------------ | ---------------------------------------------------------- |
+| 请求方式     | `POST`                                                     |
+| 请求路径     | `/api/ai/subjects`                                         |
+| Content-Type | `application/json`                                         |
+| 鉴权与会员   | `VipCheckMiddleware`；Bearer Token 优先，兼容 `x-user-id`  |
+| 响应格式     | `application/json; charset=utf-8`                          |
+| 是否流式     | 否，一次性返回完整结果                                     |
+| 服务端超时   | 未单独设置，取决于 DeepSeek 应答（固定 `max_tokens=2048`） |
 
 > 路径说明：控制器使用 `@Api('/ai')` 装饰，实际前缀为 `/api`，因此对外路径是 `/api/ai/subjects`。
 > 对应源码：`src/controller/ai.ts`（`getSubjects` / `getSubjectByRequestId`）、
@@ -37,10 +37,10 @@
 
 请求体为 JSON 对象，`config` 与 `prompt` 均为必填：
 
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `config` | object | 是 | 出题配置（年级、题型、题量等）。服务端执行 `JSON.stringify(config)` 后作为**用户消息**发给模型 |
-| `prompt` | string | 是 | 系统提示词（System Prompt），决定模型角色与输出格式 |
+| 字段     | 类型   | 必填 | 说明                                                                                           |
+| -------- | ------ | ---- | ---------------------------------------------------------------------------------------------- |
+| `config` | object | 是   | 出题配置（年级、题型、题量等）。服务端执行 `JSON.stringify(config)` 后作为**用户消息**发给模型 |
+| `prompt` | string | 是   | 系统提示词（System Prompt），决定模型角色与输出格式                                            |
 
 校验规则：两个字段都必须为「真值」。任意一个缺失、为 `null`、空字符串 `""`、`0`、`false` 都会直接报错，
 返回 `{"status":404,"message":"config and prompt are required"}`（HTTP 状态码 500）。
@@ -61,6 +61,7 @@ user   消息 = JSON.stringify(config)
 ```bash
 curl -X POST 'http://localhost:7001/api/ai/subjects' \
   -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <accessToken>' \
   -d '{
     "config": {
       "grade": "二年级上册",
@@ -82,7 +83,10 @@ curl -X POST 'http://localhost:7001/api/ai/subjects' \
 async function generateSubjects(config, prompt) {
   const res = await fetch('/api/ai/subjects', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
     body: JSON.stringify({ config, prompt }),
   });
   const json = await res.json();
@@ -98,7 +102,7 @@ const { requestid, data } = await generateSubjects(
   '你是一位资深小学语文老师，专门为小学生出成语练习题……只输出练习题本身。'
 );
 console.log(requestid); // "6ed4b262-9827-40c5-8859-5a61a20eb9eb"
-console.log(data);      // "1. 守株__兔\n\n2. 亡羊__牢"
+console.log(data); // "1. 守株__兔\n\n2. 亡羊__牢"
 ```
 
 ## 4. 响应说明
@@ -115,10 +119,10 @@ console.log(data);      // "1. 守株__兔\n\n2. 亡羊__牢"
 }
 ```
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `status` | number | 业务状态码，成功固定为 `200` |
-| `data` | string | 大模型返回的完整文本，具体格式由 `prompt` 约定 |
+| 字段        | 类型   | 说明                                                         |
+| ----------- | ------ | ------------------------------------------------------------ |
+| `status`    | number | 业务状态码，成功固定为 `200`                                 |
+| `data`      | string | 大模型返回的完整文本，具体格式由 `prompt` 约定               |
 | `requestid` | string | 本次结果的唯一 id（uuid v4）。用于通过下面的查询接口复查结果 |
 
 > `data` 是**纯文本字符串**，不是结构化 JSON。调用方若需要结构化题目，
@@ -126,10 +130,10 @@ console.log(data);      // "1. 守株__兔\n\n2. 亡羊__牢"
 
 ### 4.2 异常情况
 
-| 场景 | HTTP 状态码 | 响应体 |
-| --- | --- | --- |
-| `config` 或 `prompt` 缺失/为空 | 500 | `{"status":404,"message":"config and prompt are required"}` |
-| DeepSeek 调用失败（网络/额度/超时） | 500 | `{"status":404,"message":"Failed to get response from DeepSeek API"}` |
+| 场景                                | HTTP 状态码 | 响应体                                                                |
+| ----------------------------------- | ----------- | --------------------------------------------------------------------- |
+| `config` 或 `prompt` 缺失/为空      | 500         | `{"status":404,"message":"config and prompt are required"}`           |
+| DeepSeek 调用失败（网络/额度/超时） | 500         | `{"status":404,"message":"Failed to get response from DeepSeek API"}` |
 
 > 该接口没有独立的业务错误码封装：错误时 HTTP 状态码为 500，但响应体里的 `status` 字段是 404（全局中间件历史行为）。
 > 调用方应同时判断 HTTP 200 与 `body.status === 200`，不要只看 `body.status`。
@@ -139,13 +143,13 @@ console.log(data);      // "1. 守株__兔\n\n2. 亡羊__牢"
 
 用出题时返回的 `requestid` 复查这次结果。
 
-| 项 | 说明 |
-| --- | --- |
-| 请求方式 | `GET` |
-| 请求路径 | `/api/ai/subjects` |
-| 参数 | Query 参数 `requestid`（必填） |
-| 鉴权 | 无 |
-| 响应格式 | `application/json; charset=utf-8` |
+| 项       | 说明                                  |
+| -------- | ------------------------------------- |
+| 请求方式 | `GET`                                 |
+| 请求路径 | `/api/ai/subjects`                    |
+| 参数     | Query 参数 `requestid`（必填）        |
+| 鉴权     | 无                                    |
+| 响应格式 | `application/json; charset=utf-8`     |
 | 返回内容 | 同 4.1：`{ status, requestid, data }` |
 
 ### 5.1 请求示例
@@ -179,11 +183,11 @@ async function fetchSubjects(requestid) {
 
 ### 5.3 异常情况
 
-| 场景 | HTTP 状态码 | 响应体 `message` |
-| --- | --- | --- |
-| 未传 `requestid` | 500 | `requestid is required` |
-| 记录不存在（含已被清理） | 500 | `subject not found` |
-| 记录超过 24 小时 | 500 | `subject is expired` |
+| 场景                     | HTTP 状态码 | 响应体 `message`        |
+| ------------------------ | ----------- | ----------------------- |
+| 未传 `requestid`         | 500         | `requestid is required` |
+| 记录不存在（含已被清理） | 500         | `subject not found`     |
+| 记录超过 24 小时         | 500         | `subject is expired`    |
 
 > 响应形态仍是 `{"status":404,"message":"..."}`（HTTP 500），判断方式与 POST 一致。
 > 记录被定时任务清理后（最多 1 小时延迟），查询会从 `subject is expired` 变成 `subject not found`，
@@ -193,13 +197,13 @@ async function fetchSubjects(requestid) {
 
 ### 6.1 表结构 `ai_subject_store`
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `id` | int，自增主键 | 记录 id |
-| `requestid` | varchar(64)，**索引** | 接口返回给前端的唯一请求 id（uuid） |
-| `store_content` | text | 出题结果（模型返回的纯文本） |
-| `createdAt` | datetime | 入库时间，sequelize 自动维护，用于过期判断 |
-| `updatedAt` | datetime | 更新时间，sequelize 自动维护 |
+| 字段            | 类型                  | 说明                                       |
+| --------------- | --------------------- | ------------------------------------------ |
+| `id`            | int，自增主键         | 记录 id                                    |
+| `requestid`     | varchar(64)，**索引** | 接口返回给前端的唯一请求 id（uuid）        |
+| `store_content` | text                  | 出题结果（模型返回的纯文本）               |
+| `createdAt`     | datetime              | 入库时间，sequelize 自动维护，用于过期判断 |
+| `updatedAt`     | datetime              | 更新时间，sequelize 自动维护               |
 
 索引：`idx_ai_subject_store_requestid`（`requestid`）。
 
@@ -214,11 +218,11 @@ async function fetchSubjects(requestid) {
 
 ## 7. 模型参数（后端固定，不可通过本接口传入）
 
-| 参数 | 固定值 |
-| --- | --- |
-| `model` | `deepseek-chat` |
-| `temperature` | `0.7` |
-| `max_tokens` | `2048` |
+| 参数          | 固定值          |
+| ------------- | --------------- |
+| `model`       | `deepseek-chat` |
+| `temperature` | `0.7`           |
+| `max_tokens`  | `2048`          |
 
 如需调参，需修改 `src/service/AiService.ts` 中 `chatCompletion` 的调用方式。
 
@@ -235,17 +239,19 @@ async function fetchSubjects(requestid) {
      `/api/ai/subjects` 强制要求传 `prompt`，所以不受影响；老接口 `POST /api/ai/activity` 不传 `prompt` 时走服务端文件，也不受影响。
    - 若将来给 `AIService` 加 `@Singleton()` 或改为单例，「不传 prompt 时复用上一次的值」就会变成跨请求泄漏，
      届时需改为每次调用显式传参。
-4. **无鉴权与频控**：接口未做登录与频率校验，暴露公网前需在网关或中间件层补充。
+4. **会员校验**：`POST /api/ai/subjects` 由 `VipCheckMiddleware` 校验会员是否过期。
+   guest 在默认 3 天内可用，普通会员以 `available_end` 为准，`infinity` 直接有效；
+   会员过期返回 HTTP 403 和错误码 `VIP_REQUIRED`。`GET /api/ai/subjects` 当前不挂会员校验。
 5. **无重试与降级**：DeepSeek 调用失败时接口直接返回 500，重试需调用方自行实现。
 6. **`config` 语义由提示词决定**：服务端只做 `JSON.stringify`，不校验字段。
 
 ## 9. 相关接口
 
-| 接口 | 说明 |
-| --- | --- |
-| `POST /api/ai/subjects` | 出题，返回 `{ status, data, requestid }` |
+| 接口                                 | 说明                                         |
+| ------------------------------------ | -------------------------------------------- |
+| `POST /api/ai/subjects`              | 出题，返回 `{ status, data, requestid }`     |
 | `GET /api/ai/subjects?requestid=xxx` | 按 `requestid` 查询出题结果（24 小时内有效） |
-| `GET /api/ai/activity` | 获取服务端内置提示词列表 |
-| `POST /api/ai/activity` | 老接口，按 `actId` 出题 |
+| `GET /api/ai/activity`               | 获取服务端内置提示词列表                     |
+| `POST /api/ai/activity`              | 老接口，按 `actId` 出题                      |
 
 `GET /api/ai/activity` 与 `POST /api/ai/activity` 详见 [`prddoc/ai-activity-api.md`](./ai-activity-api.md)。

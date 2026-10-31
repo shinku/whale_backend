@@ -9,15 +9,15 @@
 与老接口 `POST /api/file/expend_2_file` 的区别：老接口传的是 OSS 上的图片地址 `file_urls`，
 新接口传的是图片 base64，前端无需先把图片传到服务器。
 
-| 项 | 说明 |
-| --- | --- |
-| 请求方式 | `POST` |
-| 请求路径 | `/api/file/base64_to_pdf` |
-| Content-Type | `application/json` |
-| 鉴权 | 必须携带请求头 `x-user-id`（用户 openid），缺失直接报错 |
-| 响应格式 | `application/json; charset=utf-8` |
-| 是否流式 | 否，一次性返回结果 |
-| 返回内容 | 上传成功后的文件名（不是文件内容） |
+| 项           | 说明                                                    |
+| ------------ | ------------------------------------------------------- |
+| 请求方式     | `POST`                                                  |
+| 请求路径     | `/api/file/base64_to_pdf`                               |
+| Content-Type | `application/json`                                      |
+| 鉴权         | 必须携带请求头 `x-user-id`（用户 openid），缺失直接报错 |
+| 响应格式     | `application/json; charset=utf-8`                       |
+| 是否流式     | 否，一次性返回结果                                      |
+| 返回内容     | 上传成功后的文件名（不是文件内容）                      |
 
 > 路径说明：控制器使用 `@Api('/file')` 装饰，实际前缀为 `/api`，因此对外路径是 `/api/file/base64_to_pdf`。
 > 对应源码：`src/controller/file.ts`（`base64ToPdf`）、`src/service/ImageService.ts`（`tiBase64ImageToPdf`）。
@@ -26,17 +26,17 @@
 
 ### 2.1 请求头
 
-| 字段 | 必填 | 说明 |
-| --- | --- | --- |
-| `Content-Type` | 是 | 固定 `application/json` |
-| `x-user-id` | 是 | 用户 openid。缺失时报 `{"status":404,"message":"userId is required"}` |
+| 字段           | 必填 | 说明                                                                  |
+| -------------- | ---- | --------------------------------------------------------------------- |
+| `Content-Type` | 是   | 固定 `application/json`                                               |
+| `x-user-id`    | 是   | 用户 openid。缺失时报 `{"status":404,"message":"userId is required"}` |
 
 ### 2.2 请求体
 
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `base64_list` | string[] | 是 | 图片的 base64 数组，**按数组顺序拼接到 PDF**（第一张为第 1 页） |
-| `lane` | string | 否 | 业务线，默认 `whale`。用于区分次数限制，一般前端不用传 |
+| 字段          | 类型     | 必填 | 说明                                                            |
+| ------------- | -------- | ---- | --------------------------------------------------------------- |
+| `base64_list` | string[] | 是   | 图片的 base64 数组，**按数组顺序拼接到 PDF**（第一张为第 1 页） |
+| `lane`        | string   | 否   | 业务线，默认 `whale`，一般前端不用传                            |
 
 校验规则：
 
@@ -129,15 +129,15 @@ const fileName = await imagesToPdf(list);
 }
 ```
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `status` | number | 业务状态码，成功固定为 `200` |
-| `data` | string | PDF 在 OSS 上的对象名（`pub/` 开头），**不是完整 URL、也不是文件内容** |
+| 字段     | 类型   | 说明                                                                   |
+| -------- | ------ | ---------------------------------------------------------------------- |
+| `status` | number | 业务状态码，成功固定为 `200`                                           |
+| `data`   | string | PDF 在 OSS 上的对象名（`pub/` 开头），**不是完整 URL、也不是文件内容** |
 
 拿到 `data` 后如何访问文件：
 
 ```js
-const fileUrl = `https://fms.whalepea.com/${fileName}`;               // 直链
+const fileUrl = `https://fms.whalepea.com/${fileName}`; // 直链
 // 或走后端跳转接口： GET /api/file/get/:bucketname/:filename
 const jumpUrl = `/api/file/get/${fileName}`; // => 302 跳转到 fms.whalepea.com
 ```
@@ -154,25 +154,23 @@ const jumpUrl = `/api/file/get/${fileName}`; // => 302 跳转到 fms.whalepea.co
 
 常见错误信息：
 
-| 场景 | `message` |
-| --- | --- |
-| 未登录 / 未带 `x-user-id` | `userId is required` |
-| `base64_list` 为空 | `base64_list is empty` |
-| 次数已用完 | `count_expend_2_file_limit_is_used_up` |
-| TextIn 余额不足（40003） | `余额不足，请充值后再使用` |
-| TextIn 文件过大/类型不支持（40301/40302/40303/40304） | `文件大小不超过 50M` 等对应文案 |
-| TextIn 其他错误 | 对应文案；无映射时兜底为 `图片转PDF失败` |
-| 上传 OSS 失败 | 由 OSS SDK 抛出的错误信息 |
+| 场景                                                  | `message`                                |
+| ----------------------------------------------------- | ---------------------------------------- |
+| 未登录 / 未带 `x-user-id`                             | `userId is required`                     |
+| `base64_list` 为空                                    | `base64_list is empty`                   |
+| 会员已过期                                            | `当前会员已过期，请先续费`               |
+| TextIn 余额不足（40003）                              | `余额不足，请充值后再使用`               |
+| TextIn 文件过大/类型不支持（40301/40302/40303/40304） | `文件大小不超过 50M` 等对应文案          |
+| TextIn 其他错误                                       | 对应文案；无映射时兜底为 `图片转PDF失败` |
+| 上传 OSS 失败                                         | 由 OSS SDK 抛出的错误信息                |
 
 > 调用方务必同时判断 HTTP `res.ok` 与 `body.status === 200`，不要只看 `body.status`（历史中间件行为）。
 
-## 5. 鉴权与次数限制
+## 5. 鉴权与会员校验
 
-- **鉴权**：通过请求头 `x-user-id` 识别用户（openid）。该接口未做 token 校验，公网暴露前需在网关补权限。
-- **次数限制**：复用 `expend_2_file` 的次数额度 `count_expend_2_file_limit`。
-  - 请求进入时中间件先预检查额度，额度为 0 直接返回 `count_expend_2_file_limit_is_used_up`；
-  - 成功后调用 `consumeCountLimit` 扣减 1 次；
-  - 当服务端 `limitCheck = false`（全局开关关闭）时不校验、不扣减。
+- **鉴权与会员**：由 `VipCheckMiddleware` 校验。优先读取 Bearer Token，兼容 `x-user-id`。
+- 会员在有效期内即可继续请求，不再扣减独立次数；`infinity` 直接有效。
+- 会员过期返回 HTTP 403、错误码 `VIP_REQUIRED`。
 
 ## 6. 注意事项
 

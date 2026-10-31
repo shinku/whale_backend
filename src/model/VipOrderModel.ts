@@ -10,7 +10,7 @@ import {
 
 @Table({
   tableName: 'vip_order',
-  comment: '会员购买订单，order_no 同时作为微信 out_trade_no',
+  comment: '会员订单及 guest/infinity 授予记录',
   indexes: [
     {
       name: 'uk_vip_order_order_no',
@@ -38,9 +38,10 @@ export class VipOrderModel extends Model {
 
   @Column({
     type: DataType.STRING(32),
-    allowNull: false,
+    allowNull: true,
+    comment: '微信 out_trade_no；guest/infinity 授予记录为空',
   })
-  order_no!: string;
+  order_no!: string | null;
 
   @Column({
     type: DataType.STRING(64),
@@ -79,7 +80,7 @@ export class VipOrderModel extends Model {
   @Column({
     type: DataType.STRING(20),
     allowNull: false,
-    comment: 'CREATING|PENDING|PAID|CLOSED|FAILED|REFUNDED',
+    comment: 'CREATING|PENDING|PAID|CLOSED|FAILED|REFUNDED|GRANTED',
   })
   status!: string;
 

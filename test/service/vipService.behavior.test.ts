@@ -51,6 +51,7 @@ describe('VipService membership identity', () => {
   });
 
   it('returns only active paid orders in latest-first order', async () => {
+    jest.spyOn(UserVipModel, 'findOne').mockResolvedValue(null);
     jest.spyOn(VipOrderModel, 'findAll').mockResolvedValue([
       {
         order_no: 'VIP_MONTH',
@@ -89,6 +90,7 @@ describe('VipService membership identity', () => {
   });
 
   it('returns an empty VIP array when no paid order is active', async () => {
+    jest.spyOn(UserVipModel, 'findOne').mockResolvedValue(null);
     jest.spyOn(VipOrderModel, 'findAll').mockResolvedValue([
       {
         order_no: 'VIP_EXPIRED',

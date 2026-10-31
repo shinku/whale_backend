@@ -8,15 +8,15 @@
 与 `base64_to_pdf` / `base64_to_word` 不同，本接口**不做任何识别或格式转换**，
 只是把 base64 落成图片文件，因此它是最快、最便宜的一个接口。
 
-| 项 | 说明 |
-| --- | --- |
-| 请求方式 | `POST` |
-| 请求路径 | `/api/file/base64_to_image` |
-| Content-Type | `application/json`（请求体是 JSON，非文件流） |
-| 鉴权 | 必须携带请求头 `x-user-id`（用户 openid），缺失直接报错 |
-| 响应格式 | `application/json; charset=utf-8` |
-| 是否流式 | 否，一次性返回结果 |
-| 返回内容 | 上传成功后的文件名（不是文件内容） |
+| 项           | 说明                                                    |
+| ------------ | ------------------------------------------------------- |
+| 请求方式     | `POST`                                                  |
+| 请求路径     | `/api/file/base64_to_image`                             |
+| Content-Type | `application/json`（请求体是 JSON，非文件流）           |
+| 鉴权         | 必须携带请求头 `x-user-id`（用户 openid），缺失直接报错 |
+| 响应格式     | `application/json; charset=utf-8`                       |
+| 是否流式     | 否，一次性返回结果                                      |
+| 返回内容     | 上传成功后的文件名（不是文件内容）                      |
 
 > 路径说明：控制器使用 `@Api('/file')` 装饰，实际前缀为 `/api`，因此对外路径是 `/api/file/base64_to_image`。
 > 对应源码：`src/controller/file.ts`（`base64ToImage`）、`src/service/OssService.ts`（`uploadStream`）。
@@ -25,16 +25,16 @@
 
 ### 2.1 请求头
 
-| 字段 | 必填 | 说明 |
-| --- | --- | --- |
-| `Content-Type` | 是 | 固定 `application/json` |
-| `x-user-id` | 是 | 用户 openid。缺失时报 `{"status":404,"message":"userId is required"}` |
+| 字段           | 必填 | 说明                                                                  |
+| -------------- | ---- | --------------------------------------------------------------------- |
+| `Content-Type` | 是   | 固定 `application/json`                                               |
+| `x-user-id`    | 是   | 用户 openid。缺失时报 `{"status":404,"message":"userId is required"}` |
 
 ### 2.2 请求体
 
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `base64` | string | 是 | **单张**图片的 base64，支持带 data URL 前缀 |
+| 字段     | 类型   | 必填 | 说明                                        |
+| -------- | ------ | ---- | ------------------------------------------- |
+| `base64` | string | 是   | **单张**图片的 base64，支持带 data URL 前缀 |
 
 校验规则：
 
@@ -131,15 +131,15 @@ const fileName = await uploadBase64Image(base64);
 }
 ```
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `status` | number | 业务状态码，成功固定为 `200` |
-| `data` | string | 图片在 OSS 上的对象名（`pub/` 开头），**不是完整 URL、也不是文件内容** |
+| 字段     | 类型   | 说明                                                                   |
+| -------- | ------ | ---------------------------------------------------------------------- |
+| `status` | number | 业务状态码，成功固定为 `200`                                           |
+| `data`   | string | 图片在 OSS 上的对象名（`pub/` 开头），**不是完整 URL、也不是文件内容** |
 
 拿到 `data` 后如何访问图片：
 
 ```js
-const fileUrl = `https://fms.whalepea.com/${fileName}`;               // 直链
+const fileUrl = `https://fms.whalepea.com/${fileName}`; // 直链
 // 或走后端跳转接口： GET /api/file/get/:bucketname/:filename
 const jumpUrl = `/api/file/get/${fileName}`; // => 302 跳转到 fms.whalepea.com
 ```
@@ -156,19 +156,19 @@ const jumpUrl = `/api/file/get/${fileName}`; // => 302 跳转到 fms.whalepea.co
 
 常见错误信息：
 
-| 场景 | `message` |
-| --- | --- |
-| 未登录 / 未带 `x-user-id` | `userId is required` |
-| `base64` 为空 | `base64 is empty` |
-| 上传 OSS 失败 | 由 OSS SDK 抛出的错误信息 |
+| 场景                      | `message`                 |
+| ------------------------- | ------------------------- |
+| 未登录 / 未带 `x-user-id` | `userId is required`      |
+| `base64` 为空             | `base64 is empty`         |
+| 上传 OSS 失败             | 由 OSS SDK 抛出的错误信息 |
 
 > 调用方务必同时判断 HTTP `res.ok` 与 `body.status === 200`，不要只看 `body.status`（历史中间件行为）。
 
 ## 5. 鉴权与次数限制
 
 - **鉴权**：通过请求头 `x-user-id` 识别用户（openid）。该接口未做 token 校验，公网暴露前需在网关补权限。
-- **次数限制**：本接口**不走次数扣减**（无 TextIn 等第三方调用成本）。若后续需要计次，
-  可参考 `base64_to_word` 的做法接入 `consumeCountLimit`。
+- **次数限制**：本接口目前不挂次数限制或 VIP 校验；需要会员门槛时应后续单独接入
+  `VipCheckMiddleware`。
 
 ## 6. 注意事项
 

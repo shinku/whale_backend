@@ -27,7 +27,7 @@ export class UserVipModel extends Model {
 
   @Column({
     type: DataType.STRING(20),
-    comment: 'guest|monthly|quarterly|yearly，兼容历史 vip|svip',
+    comment: 'guest|monthly|quarterly|yearly|infinity，兼容历史 vip|svip',
     allowNull: false,
   })
   type!: string;
@@ -42,7 +42,7 @@ export class UserVipModel extends Model {
   @Column({
     type: DataType.DATE,
     allowNull: true,
-    comment: '会员结束时间',
+    comment: '会员结束时间，NULL 表示永不过期',
   })
-  available_end!: Date;
+  available_end!: Date | null;
 }

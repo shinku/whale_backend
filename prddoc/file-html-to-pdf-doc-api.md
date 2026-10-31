@@ -4,21 +4,21 @@
 
 两个接口都是「前端把自己拼好的 HTML 交给服务端，导出成可下载的文件」：
 
-| 接口 | 路径 | 产物 | 实现 |
-| --- | --- | --- | --- |
-| HTML 转 PDF | `POST /api/file/html_to_pdf` | `.pdf` | 无头 Chromium 渲染 HTML 后打印（保真还原样式） |
+| 接口         | 路径                         | 产物                | 实现                                                                                                                                 |
+| ------------ | ---------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| HTML 转 PDF  | `POST /api/file/html_to_pdf` | `.pdf`              | 无头 Chromium 渲染 HTML 后打印（保真还原样式）                                                                                       |
 | HTML 转 Word | `POST /api/file/html_to_doc` | `.docx`（真 OOXML） | 默认 `regural`：`html-docxjs-compiler` 把 HTML 转成 docx 元素后打包；可选 `pdfkit-convert`：HTML→PDF 保真渲染后按页转图片再塞进 docx |
 
 两者的整体行为一致：校验参数 → 生成文件 → 上传 OSS → 返回文件名。
 
-| 项 | 说明 |
-| --- | --- |
-| 请求方式 | `POST` |
-| Content-Type | `application/json` |
-| 鉴权 | 必须携带请求头 `x-user-id`（用户 openid），缺失直接报错 |
-| 响应格式 | `application/json; charset=utf-8` |
-| 是否流式 | 否，一次性返回结果 |
-| 返回内容 | 上传成功后的文件名（不是文件内容） |
+| 项           | 说明                                                    |
+| ------------ | ------------------------------------------------------- |
+| 请求方式     | `POST`                                                  |
+| Content-Type | `application/json`                                      |
+| 鉴权         | 必须携带请求头 `x-user-id`（用户 openid），缺失直接报错 |
+| 响应格式     | `application/json; charset=utf-8`                       |
+| 是否流式     | 否，一次性返回结果                                      |
+| 返回内容     | 上传成功后的文件名（不是文件内容）                      |
 
 > 路径说明：控制器使用 `@Api('/file')` 装饰，实际前缀为 `/api`。
 > 对应源码：`src/controller/file.ts`（`htmlToPdf` / `htmlToDoc`）、
@@ -30,37 +30,37 @@
 
 ### 2.1 请求头
 
-| 字段 | 必填 | 说明 |
-| --- | --- | --- |
-| `Content-Type` | 是 | 固定 `application/json` |
-| `x-user-id` | 是 | 用户 openid。缺失时报 `{"status":404,"message":"userId is required"}` |
+| 字段           | 必填 | 说明                                                                  |
+| -------------- | ---- | --------------------------------------------------------------------- |
+| `Content-Type` | 是   | 固定 `application/json`                                               |
+| `x-user-id`    | 是   | 用户 openid。缺失时报 `{"status":404,"message":"userId is required"}` |
 
 ### 2.2 html_to_pdf 请求体
 
-| 字段 | 类型 | 必填 | 默认 | 说明 |
-| --- | --- | --- | --- | --- |
-| `html` | string | 是 | - | 完整 HTML 文档或片段，片段会被浏览器自动补全 `html/body` |
-| `format` | string | 否 | `A4` | 纸张尺寸，常用 `A4` / `A3` / `Letter` |
-| `landscape` | boolean | 否 | `false` | 是否横向 |
-| `print_background` | boolean | 否 | `true` | 是否打印背景色/背景图。传 `false` 时 CSS 背景、色块会丢失 |
-| `lane` | string | 否 | `whale` | 业务线，用于区分次数限制，一般前端不用传 |
+| 字段               | 类型    | 必填 | 默认    | 说明                                                      |
+| ------------------ | ------- | ---- | ------- | --------------------------------------------------------- |
+| `html`             | string  | 是   | -       | 完整 HTML 文档或片段，片段会被浏览器自动补全 `html/body`  |
+| `format`           | string  | 否   | `A4`    | 纸张尺寸，常用 `A4` / `A3` / `Letter`                     |
+| `landscape`        | boolean | 否   | `false` | 是否横向                                                  |
+| `print_background` | boolean | 否   | `true`  | 是否打印背景色/背景图。传 `false` 时 CSS 背景、色块会丢失 |
+| `lane`             | string  | 否   | `whale` | 业务线标识，一般前端不用传                                |
 
 页边距固定为 上下 12mm、左右 10mm，暂不可配。
 
 ### 2.3 html_to_doc 请求体
 
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `html` | string | 是 | 完整 HTML 文档或片段 |
-| `toStrategy` | string | 否 | 转换策略，默认 `regural`；可选 `pdfkit-convert`（取值非法时按 `regural` 处理） |
-| `lane` | string | 否 | 业务线，默认 `whale`，一般前端不用传 |
+| 字段         | 类型   | 必填 | 说明                                                                           |
+| ------------ | ------ | ---- | ------------------------------------------------------------------------------ |
+| `html`       | string | 是   | 完整 HTML 文档或片段                                                           |
+| `toStrategy` | string | 否   | 转换策略，默认 `regural`；可选 `pdfkit-convert`（取值非法时按 `regural` 处理） |
+| `lane`       | string | 否   | 业务线，默认 `whale`，一般前端不用传                                           |
 
 两种策略：
 
-| 策略 | 原理 | 特点 |
-| --- | --- | --- |
-| `regural`（默认） | `html-docxjs-compiler` 把 HTML 解析成 docx 元素后打包 | 稳定、产物是真正的可编辑 Word 元素；但复杂布局/样式还原度有限 |
-| `pdfkit-convert` | 无头 Chromium 把 HTML 渲染成 PDF，再把 PDF 每一页光栅化成图片后塞进 docx | 保真度高（几乎和 PDF 一模一样）；产物体积更大、Word 里是整页图片不可编辑，且偶发报错 |
+| 策略              | 原理                                                                     | 特点                                                                                 |
+| ----------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `regural`（默认） | `html-docxjs-compiler` 把 HTML 解析成 docx 元素后打包                    | 稳定、产物是真正的可编辑 Word 元素；但复杂布局/样式还原度有限                        |
+| `pdfkit-convert`  | 无头 Chromium 把 HTML 渲染成 PDF，再把 PDF 每一页光栅化成图片后塞进 docx | 保真度高（几乎和 PDF 一模一样）；产物体积更大、Word 里是整页图片不可编辑，且偶发报错 |
 
 > `pdfkit-convert` 失败时默认会自动回退到 `regural`，保证接口仍能返回结果。
 
@@ -116,8 +116,8 @@ async function htmlToPdf(html, options = {}) {
     },
     body: JSON.stringify({
       html,
-      format: options.format,             // 'A4' | 'A3' | 'Letter'
-      landscape: options.landscape,       // boolean
+      format: options.format, // 'A4' | 'A3' | 'Letter'
+      landscape: options.landscape, // boolean
       print_background: options.printBackground, // boolean，默认 true
     }),
   });
@@ -157,16 +157,16 @@ async function htmlToDoc(html, toStrategy = 'regural') {
 { "status": 200, "data": "pub/1728381842163_42.7.docx" }
 ```
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `status` | number | 业务状态码，成功固定为 `200` |
-| `data` | string | 文件在 OSS 上的对象名（`pub/` 开头），**不是完整 URL、也不是文件内容** |
+| 字段     | 类型   | 说明                                                                   |
+| -------- | ------ | ---------------------------------------------------------------------- |
+| `status` | number | 业务状态码，成功固定为 `200`                                           |
+| `data`   | string | 文件在 OSS 上的对象名（`pub/` 开头），**不是完整 URL、也不是文件内容** |
 
 拿到 `data` 后如何访问文件：
 
 ```js
-const fileUrl = `https://fms.whalepea.com/${fileName}`;   // 直链
-const jumpUrl = `/api/file/get/${fileName}`;              // 后端 302 跳转到 fms.whalepea.com
+const fileUrl = `https://fms.whalepea.com/${fileName}`; // 直链
+const jumpUrl = `/api/file/get/${fileName}`; // 后端 302 跳转到 fms.whalepea.com
 ```
 
 > 提示：`data` 已经带 `pub/` 前缀，拼接直链时不要再额外加目录。
@@ -179,24 +179,19 @@ const jumpUrl = `/api/file/get/${fileName}`;              // 后端 302 跳转�
 { "status": 404, "message": "<错误信息>" }
 ```
 
-| 场景 | `message` |
-| --- | --- |
-| 未登录 / 未带 `x-user-id` | `userId is required` |
-| `html` 为空 | `html is empty` |
-| 次数已用完 | `count_convert_file_limit_is_used_up` |
+| 场景                                              | `message`                      |
+| ------------------------------------------------- | ------------------------------ |
+| 未登录 / 未带 `x-user-id`                         | `userId is required`           |
+| `html` 为空                                       | `html is empty`                |
 | Chromium 渲染超时（如页面引用了打不开的外链资源） | Playwright 的 timeout 错误信息 |
-| docx 生成失败（HTML 结构异常） | 对应错误信息 |
-| 上传 OSS 失败 | 由 OSS SDK 抛出的错误信息 |
+| docx 生成失败（HTML 结构异常）                    | 对应错误信息                   |
+| 上传 OSS 失败                                     | 由 OSS SDK 抛出的错误信息      |
 
 > 调用方务必同时判断 HTTP `res.ok` 与 `body.status === 200`，不要只看 `body.status`（历史中间件行为）。
 
-## 5. 鉴权与次数限制
+## 5. 鉴权与会员校验
 
-- **鉴权**：通过请求头 `x-user-id` 识别用户（openid）。该接口未做 token 校验，公网暴露前需在网关补权限。
-- **次数限制**：两个接口共用 `count_convert_file_limit`（文件转换额度）。
-  - 请求进入时中间件先预检查额度，额度为 0 直接返回 `count_convert_file_limit_is_used_up`；
-  - 成功后调用 `consumeCountLimit` 扣减 1 次；
-  - 当服务端 `limitCheck = false`（全局开关关闭）时不校验、不扣减。
+- **当前接口不校验会员状态**，仅保留 `FileRecordMiddleware` 文件记录处理。
 
 ## 6. 两个接口的差异与注意事项
 
