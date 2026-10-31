@@ -32,6 +32,7 @@ import { ClearHandsWriteLimitMiddleware } from '../middleware/clearHandsWriteLim
 import { ConvertFileLimitMiddleware } from '../middleware/convertFileLimit';
 import { ErrorCollectLimitMiddleware } from '../middleware/errorCollectLimit';
 import { Expend2FileLimitMiddleware } from '../middleware/expend2FileLimit';
+import { FileRecordMiddleware } from '../middleware/fileRecord';
 import { Text2WordLimitMiddleware } from '../middleware/text2WordLimit';
 import { UserRecordModel } from '../model/UserRecord';
 import { ErrorCollectService } from '../service/ErrorCollectService';
@@ -46,6 +47,30 @@ export type TActionType =
   | 'convert_file'
   | 'qa'
   | 'pic_to_pdf';
+
+const FILE_RECORD_DEFAULT_LIMIT = 20;
+const FILE_RECORD_MAX_LIMIT = 50;
+
+function parseQueryInteger(
+  value: unknown,
+  fallback: number,
+  minimum: number,
+  maximum = Number.MAX_SAFE_INTEGER
+) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < minimum) {
+    return fallback;
+  }
+  return Math.min(number, maximum);
+}
+
+export function buildFileRecordUrl(file: string) {
+  const normalizedFile = file.trim();
+  if (/^https?:\/\//i.test(normalizedFile)) {
+    return normalizedFile;
+  }
+  return `https://fms.whalepea.com/${normalizedFile.replace(/^\/+/, '')}`;
+}
 
 export function base64ToImage(base64String: string, outputFilePath: string) {
   // 移除Base64编码的前缀（如：data:image/png;base64,）
@@ -140,7 +165,7 @@ export class FileController {
   }
 
   @Post('/upload/clear_hands_write', {
-    middleware: [ClearHandsWriteLimitMiddleware],
+    middleware: [ClearHandsWriteLimitMiddleware, FileRecordMiddleware],
   })
   async clearHandsWrite(
     @Files() files: any[],
@@ -150,7 +175,7 @@ export class FileController {
   }
 
   @Post('/upload/convert_file', {
-    middleware: [ConvertFileLimitMiddleware],
+    middleware: [ConvertFileLimitMiddleware, FileRecordMiddleware],
   })
   async convertFile(
     @Files() files: any[],
@@ -192,17 +217,6 @@ export class FileController {
           forbidOverride: 'true',
           folderName: 'pub/',
         });
-        // 保存文件记录
-        try {
-          await UserRecordModel.create({
-            image_url_after: 'pub/' + filename,
-            user_id: userId,
-            image_url_before: '',
-            lane,
-          });
-        } catch (e) {
-          console.log(e);
-        }
         await this.userService.consumeCountLimit(
           userId,
           lane,
@@ -221,12 +235,6 @@ export class FileController {
           fileUrl: fileUrl,
           userId,
         });
-        await UserRecordModel.create({
-          image_url_after: result,
-          user_id: userId,
-          image_url_before: '',
-          lane,
-        });
         await this.userService.consumeCountLimit(
           userId,
           lane,
@@ -239,27 +247,57 @@ export class FileController {
 
   @Get('/myupload')
   async getMyUpload() {
-    const userId = this.ctx.userId;
-    const { lane = 'whale', offset = '0' } = this.ctx.query || {};
-    const count = await UserRecordModel.count({
-      where: {
-        user_id: userId,
-        lane,
-      },
-    });
-    const records = await UserRecordModel.findAll({
-      attributes: ['image_url_after', 'lane'],
-      where: {
-        user_id: userId,
-        lane,
-      },
-      offset: Number(offset),
-      limit: 10,
-      raw: true,
-    });
+    const userId = this.ctx.userId || this.ctx.get('x-user-id');
+    if (!userId) {
+      throw new Error('userId is required');
+    }
+
+    const query = this.ctx.query || {};
+    const lane =
+      typeof query.lane === 'string' && query.lane ? query.lane : LANE.WHALE;
+    const limit = parseQueryInteger(
+      query.limit,
+      FILE_RECORD_DEFAULT_LIMIT,
+      1,
+      FILE_RECORD_MAX_LIMIT
+    );
+    const offset =
+      query.page !== undefined
+        ? (parseQueryInteger(query.page, 1, 1) - 1) * limit
+        : parseQueryInteger(query.offset, 0, 0);
+    const page = Math.floor(offset / limit) + 1;
+    const where = {
+      user_id: userId,
+      lane,
+    };
+
+    const [count, records] = await Promise.all([
+      UserRecordModel.count({ where }),
+      UserRecordModel.findAll({
+        attributes: ['id', 'image_url_after', 'lane', 'createdAt'],
+        where,
+        offset,
+        limit,
+        order: [['id', 'DESC']],
+        raw: true,
+      }),
+    ]);
+    const list = records.map(record => ({
+      id: record.id,
+      file: record.image_url_after,
+      image_url_after: record.image_url_after,
+      url: buildFileRecordUrl(record.image_url_after),
+      lane: record.lane,
+      createdAt: record.createdAt,
+    }));
+
     return {
       count,
-      list: records,
+      list,
+      page,
+      limit,
+      offset,
+      hasMore: offset + list.length < count,
     };
   }
 
@@ -292,7 +330,7 @@ export class FileController {
    * }
    */
   @Post('/error_collect', {
-    middleware: [ErrorCollectLimitMiddleware],
+    middleware: [ErrorCollectLimitMiddleware, FileRecordMiddleware],
   })
   async errorCollect() {
     const userId = this.ctx.get('x-user-id');
@@ -318,7 +356,7 @@ export class FileController {
    * }
    */
   @Post('/expend_2_file', {
-    middleware: [Expend2FileLimitMiddleware],
+    middleware: [Expend2FileLimitMiddleware, FileRecordMiddleware],
   })
   async doExpend2File() {
     /**
@@ -395,7 +433,7 @@ export class FileController {
    * }
    */
   @Post('/base64_to_pdf', {
-    middleware: [Expend2FileLimitMiddleware],
+    middleware: [Expend2FileLimitMiddleware, FileRecordMiddleware],
   })
   async base64ToPdf() {
     const userId = this.ctx.get('x-user-id');
@@ -429,7 +467,7 @@ export class FileController {
    * }
    */
   @Post('/base64_to_word', {
-    middleware: [Expend2FileLimitMiddleware],
+    middleware: [Expend2FileLimitMiddleware, FileRecordMiddleware],
   })
   async base64ToWord() {
     const userId = this.ctx.get('x-user-id');
@@ -493,7 +531,7 @@ export class FileController {
    * }
    */
   @Post('/html_to_pdf', {
-    middleware: [ConvertFileLimitMiddleware],
+    middleware: [ConvertFileLimitMiddleware, FileRecordMiddleware],
   })
   async htmlToPdf() {
     return this.htmlToFile({
@@ -535,7 +573,7 @@ export class FileController {
    * 返回：{ "status": 200, "data": "pub/<时间戳>_<随机数>.docx" }
    */
   @Post('/html_to_doc', {
-    middleware: [ConvertFileLimitMiddleware],
+    middleware: [ConvertFileLimitMiddleware, FileRecordMiddleware],
   })
   async htmlToDoc() {
     const strategy = this.ctx.request.body.toStrategy || 'regural';
@@ -593,7 +631,7 @@ export class FileController {
     });
   }*/
   @Post('/text_2_word', {
-    middleware: [Text2WordLimitMiddleware],
+    middleware: [Text2WordLimitMiddleware, FileRecordMiddleware],
   })
   async text2Word() {
     const userId = this.ctx.get('x-user-id');

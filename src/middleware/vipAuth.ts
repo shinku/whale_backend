@@ -15,7 +15,6 @@ export class VipAuthMiddleware implements IMiddleware {
       if (!match) {
         throw new BusinessError('请先登录', 401, 'AUTH_REQUIRED');
       }
-
       const payload = this.authService.verifyAccessToken(match[1].trim());
       ctx.vipAuth = {
         openid: payload.sub,

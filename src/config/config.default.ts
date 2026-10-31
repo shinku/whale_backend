@@ -26,7 +26,10 @@ export default (appInfo: MidwayAppInfo) => {
       tokenTtlSeconds: Number(process.env.AUTH_TOKEN_TTL_SECONDS || 7200),
     },
     weixinMiniProgram: {
-      appid: process.env.WX_APP_ID || process.env.WX_PAY_APP_ID || '',
+      appid:
+        process.env.WX_APP_ID ||
+        process.env.WX_PAY_APP_ID ||
+        'wxd1759a13d5977a28',
       appsecret: process.env.WX_APP_SECRET || '',
     },
     wxPay: {
@@ -42,6 +45,18 @@ export default (appInfo: MidwayAppInfo) => {
       apiBaseUrl:
         process.env.WX_PAY_API_BASE_URL || 'https://api.mch.weixin.qq.com',
       requestTimeoutMs: Number(process.env.WX_PAY_REQUEST_TIMEOUT_MS || 10000),
+    },
+    virtualPay: {
+      offerId: process.env.WX_VIRTUAL_PAY_OFFER_ID || '1450699648',
+      attach: 'pay-test',
+      sandboxAppKey: process.env.WX_VIRTUAL_PAY_SANDBOX_APP_KEY || '',
+      productionAppKey: process.env.WX_VIRTUAL_PAY_PRODUCTION_APP_KEY || '',
+    },
+    wechatMessagePush: {
+      token: process.env.WX_MESSAGE_PUSH_TOKEN || 'whalepea_wx_message',
+      encodingAesKey:
+        process.env.WX_MESSAGE_PUSH_ENCODING_AES_KEY ||
+        'AJK7hBbpoHjMuLiiFPCkgrmnWEo3O50NaoB6oiQbCqf',
     },
     /**
      * 请求体大小限制。

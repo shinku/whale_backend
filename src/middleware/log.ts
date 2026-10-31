@@ -12,6 +12,8 @@ export class LogMiddleware implements IMiddleware {
       const { status } = ctx.response;
       const sensitiveRoute =
         url.startsWith('/api/pay/wechat') ||
+        url.startsWith('/api/wx_message') ||
+        url.startsWith('/api/virtual-pay') ||
         url.startsWith('/api/vip/orders') ||
         url.startsWith('/api/auth/wechat-login');
       console.log(

@@ -5,10 +5,18 @@ import { IMiddleware, Context } from 'egg';
 export class AllMiddleware implements IMiddleware {
   resolve() {
     return async (ctx: Context<any>, next: () => Promise<any>) => {
-      ctx.set('Content-Type', 'application/json; charset=utf-8');
       const isWechatPayNotify = ctx.path.startsWith('/api/pay/wechat/notify/');
+      const isWechatMessagePush = ctx.path === '/api/wx_message';
+      if (isWechatMessagePush) {
+        ctx.type = 'text/plain';
+      } else {
+        ctx.set('Content-Type', 'application/json; charset=utf-8');
+      }
       try {
         const result = await next();
+        if (isWechatMessagePush) {
+          return (ctx.body = result);
+        }
         if (isWechatPayNotify) {
           return (ctx.body = result);
         }
@@ -36,6 +44,10 @@ export class AllMiddleware implements IMiddleware {
             code: 'FAIL',
             message,
           };
+          return;
+        }
+        if (isWechatMessagePush) {
+          ctx.body = message;
           return;
         }
         ctx.body = {
