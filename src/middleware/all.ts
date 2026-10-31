@@ -35,6 +35,7 @@ export class AllMiddleware implements IMiddleware {
         const status =
           Number(e?.status || e?.statusCode) ||
           (e?.name === 'BusinessError' ? 400 : 500);
+        this.logError(ctx, e, status);
         ctx.status = status;
         const message =
           status >= 500 ? '服务器内部错误' : e?.message || '请求失败';
@@ -56,5 +57,52 @@ export class AllMiddleware implements IMiddleware {
         };
       }
     };
+  }
+
+  private logError(ctx: Context<any>, error: unknown, status: number) {
+    const errorContent =
+      error instanceof Error
+        ? {
+            name: error.name,
+            message: error.message,
+            status:
+              Number((error as any).status || (error as any).statusCode) ||
+              status,
+            code: (error as any).code,
+            stack: error.stack,
+          }
+        : error;
+    const seen = new WeakSet<object>();
+    try {
+      console.error(
+        JSON.stringify(
+          {
+            error: errorContent,
+            request: ctx.request?.body ?? null,
+            query: ctx.query ?? {},
+          },
+          (_key, value) => {
+            if (typeof value === 'bigint') {
+              return value.toString();
+            }
+            if (value && typeof value === 'object') {
+              if (seen.has(value)) {
+                return '[Circular]';
+              }
+              seen.add(value);
+            }
+            return value;
+          }
+        )
+      );
+    } catch {
+      console.error(
+        JSON.stringify({
+          error: String(errorContent),
+          request: String(ctx.request?.body),
+          query: String(ctx.query),
+        })
+      );
+    }
   }
 }

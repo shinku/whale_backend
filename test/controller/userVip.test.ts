@@ -52,7 +52,6 @@ describe('GET /api/user/:token VIP fields', () => {
         count_clear_hands_write_limit: 10,
       }),
     } as any;
-
     const result = await controller.getUserInfo();
 
     expect(result.data.vip).toEqual(vip);
