@@ -1,13 +1,12 @@
 import { Inject, Middleware } from '@midwayjs/core';
 import { Context, IMiddleware } from 'egg';
 import { BusinessError } from '../core/errors';
-import { isVipActive } from '../core/vip';
-import { UserVipModel } from '../model/UserVipModel';
 import { AuthService } from '../service/AuthService';
 import {
   DEFAULT_EXTRA_CONFIG,
   ExtraConfigService,
 } from '../service/ExtraConfigService';
+import { VipMembershipService } from '../service/VipMembershipService';
 
 @Middleware()
 export class VipCheckMiddleware implements IMiddleware {
@@ -16,6 +15,9 @@ export class VipCheckMiddleware implements IMiddleware {
 
   @Inject()
   extraConfigService!: ExtraConfigService;
+
+  @Inject()
+  vipMembershipService!: VipMembershipService;
 
   resolve() {
     return async (ctx: Context<any>, next: () => Promise<any>) => {
@@ -38,19 +40,13 @@ export class VipCheckMiddleware implements IMiddleware {
         throw new BusinessError('请先登录', 401, 'AUTH_REQUIRED');
       }
 
-      const vipRecord = await UserVipModel.findOne({
-        attributes: ['type', 'available_start', 'available_end'],
-        where: {
-          user_id: openid,
-        },
-        raw: true,
-      });
-      const vipActive = vipRecord
-        ? isVipActive(vipRecord.type, vipRecord.available_end)
-        : false;
+      const membership = await this.vipMembershipService.getCurrentMembership(
+        openid
+      );
+      const vipActive = Boolean(membership?.active);
       ctx.vipCheck = {
         openid,
-        vipType: vipRecord?.type || 'guest',
+        vipType: membership?.type || 'guest',
         vipActive,
       };
       if (!vipActive) {

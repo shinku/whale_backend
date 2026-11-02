@@ -12,7 +12,8 @@
 {
   "vipCheckEnabled": false,
   "guestVipInitialization": true,
-  "guestValidityDays": 3
+  "guestValidityDays": 3,
+  "examCheckDailyLimit": 5
 }
 ```
 
@@ -23,6 +24,7 @@
 | `vipCheckEnabled`        | boolean          | `false` | `VipCheckMiddleware` 的全局开关；关闭时所有 VIP 校验直接通过 |
 | `guestVipInitialization` | boolean          | `true`  | 是否在首次用户访问时创建 guest VIP                           |
 | `guestValidityDays`      | positive integer | `3`     | guest VIP 有效天数                                           |
+| `examCheckDailyLimit`    | positive integer | `5`     | 每个 VIP 用户每天可调用作业检查接口的次数                    |
 
 配置由单例 `ExtraConfigService` 读取，并缓存 5 分钟。更新文件后最多等待
 5 分钟生效，不需要重启应用；再次读取失败时继续使用默认配置。

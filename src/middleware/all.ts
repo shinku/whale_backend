@@ -1,5 +1,6 @@
 import { Middleware } from '@midwayjs/core';
 import { IMiddleware, Context } from 'egg';
+import { Stream } from 'stream';
 
 @Middleware()
 export class AllMiddleware implements IMiddleware {
@@ -18,6 +19,9 @@ export class AllMiddleware implements IMiddleware {
           return (ctx.body = result);
         }
         if (isWechatPayNotify) {
+          return (ctx.body = result);
+        }
+        if (result instanceof Stream) {
           return (ctx.body = result);
         }
         if (typeof result === 'object') {

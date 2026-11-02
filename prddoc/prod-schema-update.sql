@@ -5,30 +5,16 @@
 SET NAMES utf8mb4;
 
 -- ---------------------------------------------------------------------------
--- 0. 执行前检查
+-- 0. 已废弃的会员汇总表
 -- ---------------------------------------------------------------------------
 
--- 必须返回 0 行，才能创建 user_vip_record.user_id 唯一索引。
-SELECT
-  `user_id`,
-  COUNT(*) AS `duplicate_count`
-FROM `user_vip_record`
-WHERE `user_id` IS NOT NULL
-GROUP BY `user_id`
-HAVING COUNT(*) > 1;
-
--- 可先备份有重复数据的用户会员记录，例如：
--- CREATE TABLE `user_vip_record_backup_20261031` AS
--- SELECT * FROM `user_vip_record`;
+-- user_vip_record 已废弃，会员状态统一从 vip_order 计算。
+-- 如需清理旧表，单独执行：
+-- prddoc/migrations/20261103-drop-user-vip-record.sql
 
 -- ---------------------------------------------------------------------------
 -- 1. 旧表兼容变更
 -- ---------------------------------------------------------------------------
-
--- 用户会员汇总按 user_id 唯一，避免并发 findOrCreate 产生重复记录。
--- 如果第 0 步查询有结果，必须先人工合并重复数据再执行本语句。
-ALTER TABLE `user_vip_record`
-  ADD UNIQUE KEY `uk_user_vip_record_user_id` (`user_id`);
 
 -- ---------------------------------------------------------------------------
 -- 2. 新增表
@@ -210,9 +196,6 @@ CREATE TABLE IF NOT EXISTS `wechat_message_push_record` (
 --   WHERE `user_id` IS NULL OR `lane` IS NULL
 --      OR `image_url_before` IS NULL OR `image_url_after` IS NULL
 --      OR `createdAt` IS NULL OR `updatedAt` IS NULL;
--- SELECT 'user_vip_record' AS table_name, COUNT(*) AS invalid_rows FROM `user_vip_record`
---   WHERE `user_id` IS NULL OR `type` IS NULL OR `available_start` IS NULL
---      OR `createdAt` IS NULL OR `updatedAt` IS NULL;
 
 -- 所有检查均返回 0 后，可按需执行：
 -- ALTER TABLE `app_info`
@@ -281,12 +264,5 @@ CREATE TABLE IF NOT EXISTS `wechat_message_push_record` (
 --   MODIFY `lane` varchar(255) NOT NULL,
 --   MODIFY `image_url_before` varchar(255) NOT NULL,
 --   MODIFY `image_url_after` varchar(255) NOT NULL,
---   MODIFY `createdAt` datetime NOT NULL,
---   MODIFY `updatedAt` datetime NOT NULL;
--- ALTER TABLE `user_vip_record`
---   MODIFY `user_id` varchar(255) NOT NULL,
---   MODIFY `type` varchar(20) NOT NULL
---     COMMENT 'guest|monthly|quarterly|yearly|infinity，兼容历史 vip|svip',
---   MODIFY `available_start` datetime NOT NULL COMMENT '会员生效时间',
 --   MODIFY `createdAt` datetime NOT NULL,
 --   MODIFY `updatedAt` datetime NOT NULL;

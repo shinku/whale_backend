@@ -14,6 +14,10 @@ export class PromptService {
   }
 
   async getPrompt(actName: string) {
+    return this.getPromptSync(actName);
+  }
+
+  getPromptSync(actName: string) {
     if (actName === 'README') {
       throw new Error(`prompt file not found: ${actName}.md`);
     }

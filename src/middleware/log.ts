@@ -1,5 +1,6 @@
 import { Middleware } from '@midwayjs/core';
 import { IMiddleware } from 'egg';
+import { Stream } from 'stream';
 
 @Middleware()
 export class LogMiddleware implements IMiddleware {
@@ -20,7 +21,11 @@ export class LogMiddleware implements IMiddleware {
         `${method} ${url} - ${status} - ${ms}ms - [request_body]:${
           sensitiveRoute ? '[redacted]' : JSON.stringify(body)
         } ${ctx.userId || ''} [body]: ${
-          sensitiveRoute ? '[redacted]' : JSON.stringify(ctx.body)
+          sensitiveRoute
+            ? '[redacted]'
+            : ctx.body instanceof Stream
+            ? '[stream]'
+            : JSON.stringify(ctx.body)
         }`
       );
     };

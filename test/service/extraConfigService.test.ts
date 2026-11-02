@@ -36,6 +36,7 @@ describe('ExtraConfigService', () => {
         vipCheckEnabled: true,
         guestVipInitialization: false,
         guestValidityDays: 7,
+        examCheckDailyLimit: 8,
       }) as any
     );
     const service = new ExtraConfigService();
@@ -44,6 +45,7 @@ describe('ExtraConfigService', () => {
       vipCheckEnabled: true,
       guestVipInitialization: false,
       guestValidityDays: 7,
+      examCheckDailyLimit: 8,
     });
   });
 
@@ -54,6 +56,7 @@ describe('ExtraConfigService', () => {
         vipCheckEnabled: 'yes',
         guestVipInitialization: null,
         guestValidityDays: 0,
+        examCheckDailyLimit: 0,
       }) as any
     );
     const service = new ExtraConfigService();

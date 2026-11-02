@@ -1,6 +1,7 @@
-import { Config, Provide, Scope, ScopeEnum } from '@midwayjs/core';
+import { Config, Inject, Provide, Scope, ScopeEnum } from '@midwayjs/core';
 import { Op, Sequelize } from 'sequelize';
 import { LANE } from '../core/enums';
+import { BusinessError } from '../core/errors';
 import {
   DEFAULT_USER_COUNT_LIMIT,
   USER_COUNT_LIMIT_FIELDS,
@@ -10,12 +11,70 @@ import {
 import { IUserOptions } from '../interface';
 import { UserLimitModel } from '../model/UserLimitModel';
 import { UserModel } from '../model/UserModel';
+import { VipMembershipService } from './VipMembershipService';
 
 export type TUserCountLimitMap = Record<TUserCountLimitField, number>;
+
+export interface AgentUserProfile {
+  openid: string;
+  lane: string;
+  registered: boolean;
+  userName: string | null;
+  mobile: string | null;
+  vip: {
+    type: string;
+    active: boolean;
+    availableEnd: Date | null;
+  };
+}
 
 @Provide()
 @Scope(ScopeEnum.Request, { allowDowngrade: true })
 export class UserService {
+  @Inject()
+  vipMembershipService!: VipMembershipService;
+
+  async requireAgentProfile(
+    openid: string,
+    lane: string = LANE.WHALE
+  ): Promise<AgentUserProfile> {
+    const normalized = String(openid || '').trim();
+    if (!normalized || normalized.length > 128) {
+      throw new BusinessError('用户身份无效', 401, 'INVALID_USER_ID');
+    }
+    const profile = await this.getAgentProfile(normalized, lane);
+    if (!profile.registered) {
+      throw new BusinessError('用户不存在', 401, 'INVALID_USER_ID');
+    }
+    return profile;
+  }
+
+  async getAgentProfile(
+    openid: string,
+    lane: string = LANE.WHALE
+  ): Promise<AgentUserProfile> {
+    const [user, membership] = await Promise.all([
+      UserModel.findOne({
+        attributes: ['user_name', 'user_mobile'],
+        where: { openid, lane },
+        raw: true,
+      }),
+      this.vipMembershipService.getCurrentMembership(openid),
+    ]);
+    return {
+      openid,
+      lane,
+      registered: Boolean(user),
+      userName: user?.user_name || null,
+      mobile: this.maskMobile(user?.user_mobile),
+      vip: {
+        type: membership?.type || 'guest',
+        active: Boolean(membership?.active),
+        availableEnd: membership?.available_end || null,
+      },
+    };
+  }
+
   async getUser(options: IUserOptions) {
     return {
       uid: options.uid,
@@ -155,7 +214,7 @@ export class UserService {
     return remainCount;
   }
 
-  @Config("limitCheck")
+  @Config('limitCheck')
   limitCheck!: boolean;
   /**
    * 调用成功后对次数 -1，仅在余量大于 0 时才会真正扣减
@@ -171,7 +230,7 @@ export class UserService {
       limitField
     );
     if (!this.limitCheck) {
-      return remainCount
+      return remainCount;
     }
     if (remainCount <= 0) {
       throw new Error(`${limitField}_is_used_up`);
@@ -262,5 +321,13 @@ export class UserService {
       }
     }
     return result;
+  }
+
+  private maskMobile(value: string | null | undefined) {
+    const mobile = String(value || '').trim();
+    if (!/^1\d{10}$/.test(mobile)) {
+      return mobile || null;
+    }
+    return `${mobile.slice(0, 3)}****${mobile.slice(-4)}`;
   }
 }

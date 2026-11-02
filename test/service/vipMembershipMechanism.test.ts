@@ -4,10 +4,10 @@ import {
   isVipActive,
 } from '../../src/core/vip';
 import { UserModel } from '../../src/model/UserModel';
-import { UserVipModel } from '../../src/model/UserVipModel';
 import { VipOrderModel } from '../../src/model/VipOrderModel';
 import { VipAuthMiddleware } from '../../src/middleware/vipAuth';
 import { DEFAULT_EXTRA_CONFIG } from '../../src/service/ExtraConfigService';
+import { VipMembershipService } from '../../src/service/VipMembershipService';
 import { VipService } from '../../src/service/VipService';
 
 describe('VIP membership mechanism', () => {
@@ -46,26 +46,29 @@ describe('VIP membership mechanism', () => {
     expect(result.membershipEnd).toBeNull();
   });
 
-  it('creates a three-day guest record in user_vip_record and vip_order', async () => {
+  it('creates a three-day guest record in vip_order only', async () => {
     const now = new Date();
-    const record = {
+    const order = {
       user_id: 'openid-guest',
-      type: 'guest',
-      available_start: now,
-      available_end: new Date(now.getTime() + 3 * 86400000),
+      plan_id: 'guest',
+      plan_snapshot: { name: '体验会员', memberType: 'guest' },
+      membership_start_at: now,
+      membership_end_at: new Date(now.getTime() + 3 * 86400000),
     };
     jest
-      .spyOn(UserVipModel, 'findOrCreate')
-      .mockResolvedValue([record as any, true]);
-    jest
       .spyOn(VipOrderModel, 'findOrCreate')
-      .mockResolvedValue([{} as any, true]);
+      .mockResolvedValue([order as any, true]);
     const service = new VipService();
+    service.vipMembershipService = {
+      getCurrentMembership: jest.fn().mockResolvedValue(null),
+      toMembershipInfo: (value: any) =>
+        new VipMembershipService().toMembershipInfo(value),
+    } as any;
 
     const result = await service.userVipInitializatin('openid-guest');
 
     expect(result.type).toBe('guest');
-    expect(result.available_end).toEqual(record.available_end);
+    expect(result.available_end).toEqual(order.membership_end_at);
     expect(VipOrderModel.findOrCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
@@ -78,16 +81,18 @@ describe('VIP membership mechanism', () => {
           plan_id: 'guest',
           amount_cents: 0,
           status: 'GRANTED',
-          membership_end_at: record.available_end,
+          membership_end_at: order.membership_end_at,
         }),
       })
     );
   });
 
   it('does not initialize a new guest VIP when disabled', async () => {
-    jest.spyOn(UserVipModel, 'findOne').mockResolvedValue(null);
-    const findOrCreate = jest.spyOn(UserVipModel, 'findOrCreate');
+    const findOrCreate = jest.spyOn(VipOrderModel, 'findOrCreate');
     const service = new VipService();
+    service.vipMembershipService = {
+      getCurrentMembership: jest.fn().mockResolvedValue(null),
+    } as any;
     service.extraConfigService = {
       getConfig: jest.fn().mockReturnValue({
         ...DEFAULT_EXTRA_CONFIG,
@@ -109,19 +114,22 @@ describe('VIP membership mechanism', () => {
 
   it('uses the configured guest validity days', async () => {
     const now = new Date();
-    const record = {
+    const order = {
       user_id: 'openid-custom-guest',
-      type: 'guest',
-      available_start: now,
-      available_end: new Date(now.getTime() + 7 * 86400000),
+      plan_id: 'guest',
+      plan_snapshot: { name: '体验会员', memberType: 'guest' },
+      membership_start_at: now,
+      membership_end_at: new Date(now.getTime() + 7 * 86400000),
     };
     jest
-      .spyOn(UserVipModel, 'findOrCreate')
-      .mockResolvedValue([record as any, true]);
-    jest
       .spyOn(VipOrderModel, 'findOrCreate')
-      .mockResolvedValue([{} as any, true]);
+      .mockResolvedValue([order as any, true]);
     const service = new VipService();
+    service.vipMembershipService = {
+      getCurrentMembership: jest.fn().mockResolvedValue(null),
+      toMembershipInfo: (value: any) =>
+        new VipMembershipService().toMembershipInfo(value),
+    } as any;
     service.extraConfigService = {
       getConfig: jest.fn().mockReturnValue({
         ...DEFAULT_EXTRA_CONFIG,
@@ -131,11 +139,11 @@ describe('VIP membership mechanism', () => {
 
     const result = await service.userVipInitializatin('openid-custom-guest');
 
-    expect(result.available_end).toEqual(record.available_end);
+    expect(result.available_end).toEqual(order.membership_end_at);
     expect(VipOrderModel.findOrCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         defaults: expect.objectContaining({
-          membership_end_at: record.available_end,
+          membership_end_at: order.membership_end_at,
           plan_snapshot: expect.objectContaining({
             durationDays: 7,
           }),
@@ -145,26 +153,22 @@ describe('VIP membership mechanism', () => {
   });
 
   it('grants infinity only through the special service path', async () => {
-    const record = {
+    const order = {
       user_id: 'openid-infinity',
-      type: 'guest',
-      available_start: new Date('2026-10-01T00:00:00.000Z'),
-      available_end: new Date('2026-11-01T00:00:00.000Z'),
-      save: jest.fn().mockResolvedValue(undefined),
+      plan_id: 'infinity',
+      plan_snapshot: { name: '永久会员', memberType: 'infinity' },
+      membership_start_at: new Date('2026-10-01T00:00:00.000Z'),
+      membership_end_at: null,
     };
     jest.spyOn(UserModel, 'findOne').mockResolvedValue({} as any);
     jest
-      .spyOn(UserVipModel, 'findOrCreate')
-      .mockResolvedValue([record as any, false]);
-    jest
       .spyOn(VipOrderModel, 'findOrCreate')
-      .mockResolvedValue([{} as any, true]);
+      .mockResolvedValue([order as any, false]);
     const service = new VipService();
+    service.vipMembershipService = new VipMembershipService();
 
     const result = await service.grantInfinityVip('openid-infinity');
 
-    expect(record.type).toBe('infinity');
-    expect(record.available_end).toBeNull();
     expect(result.active).toBe(true);
     expect(VipOrderModel.findOrCreate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -179,13 +183,17 @@ describe('VIP membership mechanism', () => {
   });
 
   it('returns only one active infinity VIP in user information', async () => {
-    jest.spyOn(UserVipModel, 'findOne').mockResolvedValue({
-      type: 'infinity',
-      available_start: new Date('2026-01-01T00:00:00.000Z'),
-      available_end: new Date('2020-01-01T00:00:00.000Z'),
-    } as any);
-    const findAll = jest.spyOn(VipOrderModel, 'findAll');
+    const findAll = jest.spyOn(VipOrderModel, 'findAll').mockResolvedValue([
+      {
+        order_no: 'VIP_INFINITY',
+        plan_id: 'infinity',
+        plan_snapshot: { name: '永久会员', memberType: 'infinity' },
+        membership_start_at: new Date('2026-01-01T00:00:00.000Z'),
+        membership_end_at: null,
+      },
+    ] as any);
     const service = new VipService();
+    service.vipMembershipService = new VipMembershipService();
 
     const result = await service.getVipInfo('openid-infinity');
 
@@ -195,10 +203,10 @@ describe('VIP membership mechanism', () => {
         name: '永久会员',
         active: true,
         available_start: new Date('2026-01-01T00:00:00.000Z'),
-        available_end: new Date('2020-01-01T00:00:00.000Z'),
+        available_end: null,
       },
     ]);
-    expect(findAll).not.toHaveBeenCalled();
+    expect(findAll).toHaveBeenCalled();
   });
 });
 
@@ -208,12 +216,13 @@ describe('VipAuthMiddleware membership expiry', () => {
   });
 
   it('marks an infinity user active without checking member type', async () => {
-    jest.spyOn(UserVipModel, 'findOne').mockResolvedValue({
-      type: 'infinity',
-      available_start: new Date('2026-01-01T00:00:00.000Z'),
-      available_end: null,
-    } as any);
     const middleware = new VipAuthMiddleware();
+    middleware.vipMembershipService = {
+      getCurrentMembership: jest.fn().mockResolvedValue({
+        type: 'infinity',
+        active: true,
+      }),
+    } as any;
     middleware.authService = {
       verifyAccessToken: jest.fn().mockReturnValue({
         sub: 'openid-1',

@@ -58,6 +58,9 @@ export default (appInfo: MidwayAppInfo) => {
         process.env.WX_MESSAGE_PUSH_ENCODING_AES_KEY ||
         'AJK7hBbpoHjMuLiiFPCkgrmnWEo3O50NaoB6oiQbCqf',
     },
+    qwen: {
+      appkey: process.env.QWEN_APP_KEY || '',
+    },
     /**
      * 请求体大小限制。
      * html_to_pdf / html_to_doc 会在 body 里内联大段 HTML（常含 base64 图片），
@@ -126,8 +129,8 @@ export default (appInfo: MidwayAppInfo) => {
       cleanTimeout: 5 * 60 * 1000,
       // base64: boolean，设置原始body是否是base64格式，默认为false，一般用于腾讯云的兼容
       base64: false,
-      // 仅在匹配路径到 /api/file/upload 的时候去解析 body 中的文件信息
-      match: /upload/,
+      // 仅在文件上传接口解析 multipart body，避免扫描普通请求
+      match: /^\/api\/(?:file\/upload|exam\/help_check)(?:\/|$)/,
     },
     sequelize: {
       dataSource: {

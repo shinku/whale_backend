@@ -54,6 +54,14 @@ describe('test/service/promptService.test.ts', () => {
     expect(prompt).toContain('ˈ');
   });
 
+  it('should load the nested aichat system prompt', async () => {
+    const prompt = await promptService.getPrompt('aichat/chat');
+
+    expect(prompt).toContain('{{USER_CONTEXT}}');
+    expect(prompt).toContain('范围边界（最高优先级）');
+    expect(prompt).toContain('read_chat_history');
+  });
+
   it('should not expose README as an activity prompt', async () => {
     await expect(promptService.getPrompt('README')).rejects.toThrow(
       'prompt file not found: README.md'

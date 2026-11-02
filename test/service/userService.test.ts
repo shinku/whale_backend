@@ -11,6 +11,15 @@ describe('test/service/userService.test.ts', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(NOW);
+    userService.vipMembershipService = {
+      getCurrentMembership: jest.fn().mockResolvedValue({
+        type: 'monthly',
+        available_start: new Date('2026-01-01T00:00:00.000Z'),
+        available_end: new Date('2026-02-01T00:00:00.000Z'),
+        active: true,
+        name: '月卡会员',
+      }),
+    } as any;
   });
 
   afterEach(() => {
@@ -79,5 +88,64 @@ describe('test/service/userService.test.ts', () => {
     await expect(
       userService.setLimitDate('mock_openid', 0, 'whale')
     ).rejects.toThrow('days_is_invalid');
+  });
+
+  it('should build an agent profile with masked identity and VIP status', async () => {
+    jest.spyOn(UserModel, 'findOne').mockResolvedValue({
+      user_name: '小明',
+      user_mobile: '13812345678',
+    } as any);
+
+    await expect(
+      userService.getAgentProfile('mock_openid', 'whale')
+    ).resolves.toEqual({
+      openid: 'mock_openid',
+      lane: 'whale',
+      registered: true,
+      userName: '小明',
+      mobile: '138****5678',
+      vip: {
+        type: 'monthly',
+        active: true,
+        availableEnd: new Date('2026-02-01T00:00:00.000Z'),
+      },
+    });
+  });
+
+  it('should require an existing user for the AI agent', async () => {
+    jest.spyOn(UserModel, 'findOne').mockResolvedValue({
+      user_name: '小明',
+      user_mobile: null,
+    } as any);
+    (
+      userService.vipMembershipService.getCurrentMembership as jest.Mock
+    ).mockResolvedValue({
+      type: 'monthly',
+      available_start: new Date('2026-01-01T00:00:00.000Z'),
+      available_end: new Date('2026-02-01T00:00:00.000Z'),
+      active: true,
+      name: '月卡会员',
+    });
+
+    await expect(
+      userService.requireAgentProfile('mock_openid', 'whale')
+    ).resolves.toMatchObject({
+      openid: 'mock_openid',
+      registered: true,
+    });
+  });
+
+  it('should reject an unknown x-user-id', async () => {
+    jest.spyOn(UserModel, 'findOne').mockResolvedValue(null);
+    (
+      userService.vipMembershipService.getCurrentMembership as jest.Mock
+    ).mockResolvedValue(null);
+
+    await expect(
+      userService.requireAgentProfile('invalid_openid', 'whale')
+    ).rejects.toMatchObject({
+      status: 401,
+      code: 'INVALID_USER_ID',
+    });
   });
 });

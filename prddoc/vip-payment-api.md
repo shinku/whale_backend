@@ -13,9 +13,9 @@
 | `quarter` | 季卡会员 | `quarterly` |       90 | 2880 分（28.8 元） |
 | `year`    | 年卡会员 | `yearly`    |      365 |   6800 分（68 元） |
 
-`user_vip_record.type` 的新值为 `guest | monthly | quarterly | yearly | infinity`。
-历史数据中的 `vip` 和 `svip` 仍可读取并参与有效期判断，下单成功后类型会更新为
-对应套餐的新类型。
+会员类型以 `vip_order.plan_snapshot.memberType` 为准，取值为
+`guest | monthly | quarterly | yearly | infinity`。历史数据中的 `vip` 和 `svip`
+仍可读取并参与有效期判断。
 
 首次登录会创建 `guest` 会员，默认有效期为 3 天。`infinity` 只能通过后台特殊路径
 授予，不能通过购买道具获得，其 `available_end` 为 `NULL`。
@@ -219,7 +219,7 @@ POST /admin/vip/refund/{openid}
 2. 调用微信支付 v3 `/v3/refund/domestic/refunds`。
 3. 微信退款回调 `POST /api/pay/wechat/notify/refund` 验签、解密、校验金额和商户号。
 4. 退款成功后原订单改为 `REFUNDED`。
-5. 从该用户剩余 `PAID` 订单重新计算会员汇总并更新 `user_vip_record`。
+5. 会员状态直接从该用户剩余有效 `PAID` 订单实时计算，不再维护汇总表。
 6. 如果上一笔季卡仍在有效期内，会员自动回退为季卡及季卡原到期时间。
 
 手工补录订单没有商户支付交易，退款时标记为 `MANUAL`，不会调用微信退款接口。
@@ -258,14 +258,14 @@ POST /admin/vip/refund/{openid}
 - `last_wx_error_code`、`payload_summary`：脱敏错误码和回调摘要
 - `requested_at`、`succeeded_at`：申请成功和退款成功时间
 
-### `user_vip_record`
+### 会员状态
 
-继续保存用户当前 `type`、`available_start`、`available_end`。续费时：
+会员状态完全从 `vip_order` 派生，不再使用 `user_vip_record`。查询当前会员时，
+只读取状态为 `PAID` 或 `GRANTED` 的订单，并根据订单快照中的 `memberType`、
+`membership_start_at` 和 `membership_end_at` 判断当前权益。
 
-```text
-new_start = 当前会员有效 ? 原 available_start : now
-new_end   = max(now, 原 available_end) + 套餐快照天数
-```
+历史生产库执行 [20261103-drop-user-vip-record.sql](./migrations/20261103-drop-user-vip-record.sql)
+删除旧汇总表。
 
 ## 6. 证书与配置
 

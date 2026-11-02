@@ -1,6 +1,6 @@
-import { UserVipModel } from '../../src/model/UserVipModel';
 import { VipOrderModel } from '../../src/model/VipOrderModel';
 import { VipTransactionModel } from '../../src/model/VipTransactionModel';
+import { VipMembershipService } from '../../src/service/VipMembershipService';
 import { VipService } from '../../src/service/VipService';
 
 let restoreSequelize: (() => void) | undefined;
@@ -51,30 +51,26 @@ describe('VipService virtual payment delivery', () => {
       reload: jest.fn().mockResolvedValue(undefined),
       update: jest.fn().mockResolvedValue(undefined),
     };
-    const vipRecord = {
-      type: 'quarterly',
-      available_start: previousStart,
-      available_end: previousEnd,
-      reload: jest.fn().mockResolvedValue(undefined),
-      update: jest.fn().mockResolvedValue(undefined),
-    };
     jest
       .spyOn(VipOrderModel, 'findOrCreate')
       .mockResolvedValue([order as any, true]);
-    jest.spyOn(VipOrderModel, 'findOne').mockResolvedValue({
-      plan_snapshot: {
-        memberType: 'quarterly',
-      },
-      membership_start_at: previousStart,
-      membership_end_at: previousEnd,
-    } as any);
-    jest
-      .spyOn(UserVipModel, 'findOrCreate')
-      .mockResolvedValue([vipRecord as any, false]);
     jest
       .spyOn(VipTransactionModel, 'findOrCreate')
       .mockResolvedValue([{} as any, true]);
     const service = new VipService();
+    service.vipMembershipService = new VipMembershipService();
+    jest
+      .spyOn(service.vipMembershipService, 'getCurrentMembership')
+      .mockResolvedValue({
+        type: 'quarterly',
+        name: '季卡会员',
+        active: true,
+        available_start: previousStart,
+        available_end: previousEnd,
+        order: {
+          plan_snapshot: { memberType: 'quarterly' },
+        },
+      } as any);
     const paidTime = Math.floor(Date.now() / 1000);
 
     await service.applyVirtualPayPurchase({
@@ -90,16 +86,6 @@ describe('VipService virtual payment delivery', () => {
 
     const expectedEnd = new Date(
       previousEnd.getTime() + 30 * 24 * 60 * 60 * 1000
-    );
-    expect(vipRecord.update).toHaveBeenCalledWith(
-      {
-        type: 'monthly',
-        available_start: previousStart,
-        available_end: expectedEnd,
-      },
-      {
-        transaction: expect.any(Object),
-      }
     );
     expect(order.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -137,8 +123,12 @@ describe('VipService virtual payment delivery', () => {
       } as any,
       false,
     ]);
-    const vipLookup = jest.spyOn(UserVipModel, 'findOrCreate');
     const service = new VipService();
+    service.vipMembershipService = new VipMembershipService();
+    const membershipLookup = jest.spyOn(
+      service.vipMembershipService,
+      'getCurrentMembership'
+    );
 
     await service.applyVirtualPayPurchase({
       openid: 'openid-1',
@@ -148,7 +138,7 @@ describe('VipService virtual payment delivery', () => {
       env: 0,
     });
 
-    expect(vipLookup).not.toHaveBeenCalled();
+    expect(membershipLookup).not.toHaveBeenCalled();
     expect(db.commit).toHaveBeenCalledTimes(1);
     expect(db.rollback).not.toHaveBeenCalled();
   });

@@ -1,9 +1,9 @@
 import { UserController } from '../../src/controller/admin/users';
-import { UserVipModel } from '../../src/model/UserVipModel';
 import { VipOrderModel } from '../../src/model/VipOrderModel';
 import { VipPlanModel } from '../../src/model/VipPlanModel';
 import { VipRefundModel } from '../../src/model/VipRefundModel';
 import { VipTransactionModel } from '../../src/model/VipTransactionModel';
+import { VipMembershipService } from '../../src/service/VipMembershipService';
 import { VipService } from '../../src/service/VipService';
 
 function createWxPayMock() {
@@ -31,18 +31,8 @@ function createService() {
   const service = new VipService();
   const wxPayService = createWxPayMock();
   service.wxPayService = wxPayService as any;
+  service.vipMembershipService = new VipMembershipService();
   return { service, wxPayService };
-}
-
-function createVipRecord(overrides: Record<string, any> = {}) {
-  return {
-    type: 'guest',
-    available_start: new Date('2026-01-01T00:00:00.000Z'),
-    available_end: new Date('2026-01-08T00:00:00.000Z'),
-    reload: jest.fn().mockResolvedValue(undefined),
-    update: jest.fn().mockResolvedValue(undefined),
-    ...overrides,
-  };
 }
 
 describe('VipService membership identity', () => {
@@ -51,7 +41,6 @@ describe('VipService membership identity', () => {
   });
 
   it('returns only active paid orders in latest-first order', async () => {
-    jest.spyOn(UserVipModel, 'findOne').mockResolvedValue(null);
     jest.spyOn(VipOrderModel, 'findAll').mockResolvedValue([
       {
         order_no: 'VIP_MONTH',
@@ -90,7 +79,6 @@ describe('VipService membership identity', () => {
   });
 
   it('returns an empty VIP array when no paid order is active', async () => {
-    jest.spyOn(UserVipModel, 'findOne').mockResolvedValue(null);
     jest.spyOn(VipOrderModel, 'findAll').mockResolvedValue([
       {
         order_no: 'VIP_EXPIRED',
@@ -103,10 +91,6 @@ describe('VipService membership identity', () => {
         membership_end_at: new Date('2025-03-31T00:00:00.000Z'),
       },
     ] as any);
-    const vipRecord = createVipRecord();
-    jest
-      .spyOn(UserVipModel, 'findOrCreate')
-      .mockResolvedValue([vipRecord as any, false]);
     const { service } = createService();
 
     const info = await service.getVipInfo('openid-1');
@@ -117,19 +101,6 @@ describe('VipService membership identity', () => {
   it('connects a new monthly membership to an active quarterly order', async () => {
     const quarterStart = new Date('2026-10-01T00:00:00.000Z');
     const quarterEnd = new Date('2026-12-30T00:00:00.000Z');
-    const vipRecord = createVipRecord({
-      type: 'quarterly',
-      available_start: quarterStart,
-      available_end: quarterEnd,
-    });
-    jest
-      .spyOn(UserVipModel, 'findOrCreate')
-      .mockResolvedValue([vipRecord as any, false]);
-    jest.spyOn(VipOrderModel, 'findOne').mockResolvedValue({
-      plan_snapshot: { memberType: 'quarterly' },
-      membership_start_at: quarterStart,
-      membership_end_at: quarterEnd,
-    } as any);
     jest
       .spyOn(VipTransactionModel, 'findOrCreate')
       .mockResolvedValue([{} as any, true]);
@@ -146,6 +117,18 @@ describe('VipService membership identity', () => {
     };
     const dbTransaction = {} as any;
     const { service } = createService();
+    jest
+      .spyOn(service.vipMembershipService, 'getCurrentMembership')
+      .mockResolvedValue({
+        type: 'quarterly',
+        available_start: quarterStart,
+        available_end: quarterEnd,
+        active: true,
+        name: '季卡会员',
+        order: {
+          plan_snapshot: { memberType: 'quarterly' },
+        },
+      } as any);
 
     await (service as any).grantMembership(
       order,
@@ -159,14 +142,6 @@ describe('VipService membership identity', () => {
       dbTransaction
     );
 
-    expect(vipRecord.update).toHaveBeenCalledWith(
-      {
-        type: 'monthly',
-        available_start: quarterStart,
-        available_end: new Date(quarterEnd.getTime() + 30 * 86400000),
-      },
-      { transaction: dbTransaction }
-    );
     expect(order.update).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'PAID',
@@ -399,53 +374,6 @@ describe('VipService expired order closing', () => {
 describe('VipService refund fallback and validation', () => {
   afterEach(() => {
     jest.restoreAllMocks();
-  });
-
-  it('falls back to the previous valid quarterly order after refund', async () => {
-    const quarterStart = new Date('2026-10-01T00:00:00.000Z');
-    const quarterEnd = new Date('2026-12-30T00:00:00.000Z');
-    jest.spyOn(VipOrderModel, 'findOne').mockResolvedValue({
-      plan_id: 'quarter',
-      plan_snapshot: { memberType: 'quarterly' },
-      membership_start_at: quarterStart,
-      membership_end_at: quarterEnd,
-      paid_at: new Date('2026-10-01T00:00:00.000Z'),
-    } as any);
-    const vipRecord = createVipRecord();
-    jest
-      .spyOn(UserVipModel, 'findOrCreate')
-      .mockResolvedValue([vipRecord as any, false]);
-    const { service } = createService();
-
-    await (service as any).refreshUserVipFromOrders('openid-1', {} as any);
-
-    expect(vipRecord.update).toHaveBeenCalledWith(
-      {
-        type: 'quarterly',
-        available_start: quarterStart,
-        available_end: quarterEnd,
-      },
-      { transaction: {} }
-    );
-  });
-
-  it('resets membership to guest when no paid order remains', async () => {
-    jest.spyOn(VipOrderModel, 'findOne').mockResolvedValue(null);
-    const vipRecord = createVipRecord({
-      type: 'monthly',
-      available_end: new Date('2099-01-01T00:00:00.000Z'),
-    });
-    jest
-      .spyOn(UserVipModel, 'findOrCreate')
-      .mockResolvedValue([vipRecord as any, false]);
-    const { service } = createService();
-
-    await (service as any).refreshUserVipFromOrders('openid-1', {} as any);
-
-    expect(vipRecord.update).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'guest' }),
-      { transaction: {} }
-    );
   });
 
   it('rejects a refund callback with a different merchant or amount', async () => {

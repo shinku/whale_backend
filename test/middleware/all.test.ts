@@ -1,5 +1,6 @@
 import { BusinessError } from '../../src/core/errors';
 import { AllMiddleware } from '../../src/middleware/all';
+import { Readable } from 'stream';
 
 describe('AllMiddleware error output', () => {
   afterEach(() => {
@@ -53,5 +54,24 @@ describe('AllMiddleware error output', () => {
       status: 400,
       message: '请求参数错误',
     });
+  });
+
+  it('passes through streaming responses without JSON wrapping', async () => {
+    const middleware = new AllMiddleware();
+    const handler = middleware.resolve();
+    const stream = Readable.from(['event: delta\ndata: {}\n\n']);
+    const ctx = {
+      path: '/api/exam/help_check',
+      method: 'POST',
+      request: { body: {} },
+      query: {},
+      set: jest.fn(),
+      body: undefined,
+      status: 200,
+    } as any;
+
+    await handler(ctx, async () => stream);
+
+    expect(ctx.body).toBe(stream);
   });
 });

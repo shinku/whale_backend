@@ -1,8 +1,12 @@
-import { UserVipModel } from '../../src/model/UserVipModel';
 import { VipCheckMiddleware } from '../../src/middleware/vipCheck';
 import { DEFAULT_EXTRA_CONFIG } from '../../src/service/ExtraConfigService';
 
-function createMiddleware() {
+function createMiddleware(
+  membership: Record<string, any> | null = {
+    type: 'monthly',
+    active: true,
+  }
+) {
   const middleware = new VipCheckMiddleware();
   middleware.authService = {
     verifyAccessToken: jest.fn().mockReturnValue({
@@ -15,6 +19,9 @@ function createMiddleware() {
       ...DEFAULT_EXTRA_CONFIG,
       vipCheckEnabled: true,
     }),
+  } as any;
+  middleware.vipMembershipService = {
+    getCurrentMembership: jest.fn().mockResolvedValue(membership),
   } as any;
   return middleware;
 }
@@ -31,10 +38,6 @@ describe('VipCheckMiddleware', () => {
   });
 
   it('continues when a normal membership has not expired', async () => {
-    jest.spyOn(UserVipModel, 'findOne').mockResolvedValue({
-      type: 'monthly',
-      available_end: new Date('2026-11-01T00:00:00.000Z'),
-    } as any);
     const ctx = {
       userId: 'openid-1',
       get: jest.fn().mockReturnValue(undefined),
@@ -50,45 +53,39 @@ describe('VipCheckMiddleware', () => {
   });
 
   it('continues for infinity even when the stored expiry is stale', async () => {
-    jest.spyOn(UserVipModel, 'findOne').mockResolvedValue({
+    const middleware = createMiddleware({
       type: 'infinity',
-      available_end: new Date('2020-01-01T00:00:00.000Z'),
-    } as any);
+      active: true,
+    });
     const ctx = {
       userId: 'openid-infinity',
       get: jest.fn().mockReturnValue(undefined),
     } as any;
     const next = jest.fn().mockResolvedValue('next');
 
-    await expect(createMiddleware().resolve()(ctx, next)).resolves.toBe('next');
+    await expect(middleware.resolve()(ctx, next)).resolves.toBe('next');
   });
 
   it('rejects an expired membership', async () => {
-    jest.spyOn(UserVipModel, 'findOne').mockResolvedValue({
-      type: 'monthly',
-      available_end: new Date('2026-10-30T00:00:00.000Z'),
-    } as any);
+    const middleware = createMiddleware(null);
     const ctx = {
       userId: 'openid-expired',
       get: jest.fn().mockReturnValue(undefined),
     } as any;
     const next = jest.fn();
 
-    await expect(createMiddleware().resolve()(ctx, next)).rejects.toMatchObject(
-      {
-        status: 403,
-        code: 'VIP_REQUIRED',
-      }
-    );
+    await expect(middleware.resolve()(ctx, next)).rejects.toMatchObject({
+      status: 403,
+      code: 'VIP_REQUIRED',
+    });
     expect(next).not.toHaveBeenCalled();
   });
 
   it('prefers the authenticated Bearer token user', async () => {
-    jest.spyOn(UserVipModel, 'findOne').mockResolvedValue({
+    const middleware = createMiddleware({
       type: 'guest',
-      available_end: null,
-    } as any);
-    const middleware = createMiddleware();
+      active: true,
+    });
     const get = jest.fn((name: string) =>
       name.toLowerCase() === 'authorization' ? 'Bearer signed-token' : undefined
     );
@@ -102,13 +99,9 @@ describe('VipCheckMiddleware', () => {
     expect(middleware.authService.verifyAccessToken).toHaveBeenCalledWith(
       'signed-token'
     );
-    expect(UserVipModel.findOne).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          user_id: 'openid-token',
-        },
-      })
-    );
+    expect(
+      middleware.vipMembershipService.getCurrentMembership
+    ).toHaveBeenCalledWith('openid-token');
   });
 
   it('allows all requests when VIP checking is disabled', async () => {
@@ -119,14 +112,18 @@ describe('VipCheckMiddleware', () => {
         vipCheckEnabled: false,
       }),
     } as any;
-    const vipLookup = jest.spyOn(UserVipModel, 'findOne');
+    middleware.vipMembershipService = {
+      getCurrentMembership: jest.fn(),
+    } as any;
     const ctx = {
       get: jest.fn(),
     } as any;
     const next = jest.fn().mockResolvedValue('next');
 
     await expect(middleware.resolve()(ctx, next)).resolves.toBe('next');
-    expect(vipLookup).not.toHaveBeenCalled();
+    expect(
+      middleware.vipMembershipService.getCurrentMembership
+    ).not.toHaveBeenCalled();
     expect(ctx.get).not.toHaveBeenCalled();
   });
 });

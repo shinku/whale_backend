@@ -13,13 +13,16 @@ import {
   VipMemberType,
   VipVirtualPayProductId,
 } from '../core/vip';
-import { UserVipModel } from '../model/UserVipModel';
 import { UserModel } from '../model/UserModel';
 import { VipOrderModel } from '../model/VipOrderModel';
 import { VipPlanModel } from '../model/VipPlanModel';
 import { VipRefundModel } from '../model/VipRefundModel';
 import { VipTransactionModel } from '../model/VipTransactionModel';
 import { DEFAULT_EXTRA_CONFIG, ExtraConfigService } from './ExtraConfigService';
+import {
+  VipMembershipInfo,
+  VipMembershipService,
+} from './VipMembershipService';
 import { WxPayService, WxRefundResource, WxTransaction } from './WxPayService';
 
 interface PlanSnapshot {
@@ -49,11 +52,6 @@ const DUPLICATE_ORDER_WINDOW_MS = 10 * 1000;
 const ACTIVE_QUERY_DELAY_MS = 3 * 1000;
 const ORDER_CLOSE_AFTER_MS = 2 * 60 * 60 * 1000;
 const REFUND_QUERY_DELAY_MS = 30 * 1000;
-const PLAN_MEMBER_TYPES: Record<string, string> = {
-  month: 'monthly',
-  quarter: 'quarterly',
-  year: 'yearly',
-};
 const VIP_TYPE_NAMES: Record<string, string> = {
   guest: '体验会员',
   monthly: '月卡会员',
@@ -71,6 +69,9 @@ export class VipService {
 
   @Inject()
   extraConfigService!: ExtraConfigService;
+
+  @Inject()
+  vipMembershipService!: VipMembershipService;
 
   async ensureDefaultPlans() {
     await VipPlanModel.bulkCreate(
@@ -110,14 +111,15 @@ export class VipService {
   async userVipInitializatin(openid: string) {
     const extraConfig =
       this.extraConfigService?.getConfig() || DEFAULT_EXTRA_CONFIG;
+    const existing = await this.vipMembershipService.getCurrentMembership(
+      openid,
+      {
+        includeExpired: true,
+      }
+    );
     if (!extraConfig.guestVipInitialization) {
-      const existing = await UserVipModel.findOne({
-        where: {
-          user_id: openid,
-        },
-      });
       if (existing) {
-        return this.toVipInfo(existing);
+        return this.toPublicVipInfo(existing);
       }
       return {
         type: 'guest',
@@ -130,36 +132,21 @@ export class VipService {
 
     const now = new Date();
     const guestValidityDays = extraConfig.guestValidityDays;
-    const [record] = await UserVipModel.findOrCreate({
-      where: {
-        user_id: openid,
-      },
-      defaults: {
-        user_id: openid,
-        type: 'guest',
-        available_start: now,
-        available_end: new Date(
-          now.getTime() + guestValidityDays * 24 * 60 * 60 * 1000
-        ),
-      },
-    });
-    if (record.type === 'guest') {
-      await this.ensureGuestMembershipOrder(record, guestValidityDays);
+    if (existing) {
+      return this.toPublicVipInfo(existing, now);
     }
-    return this.toVipInfo(record, now);
+    const order = await this.ensureGuestMembershipOrder(
+      openid,
+      guestValidityDays,
+      now
+    );
+    return this.toPublicVipInfo(
+      this.vipMembershipService.toMembershipInfo(order, now),
+      now
+    );
   }
 
   async getVipInfo(openid: string) {
-    const currentVip = await UserVipModel.findOne({
-      attributes: ['type', 'available_start', 'available_end'],
-      where: {
-        user_id: openid,
-      },
-      raw: true,
-    });
-    if (currentVip?.type === 'infinity') {
-      return [this.toVipInfo(currentVip as unknown as UserVipModel)];
-    }
     const orders = await VipOrderModel.findAll({
       where: {
         user_id: openid,
@@ -645,21 +632,25 @@ export class VipService {
     startTime: Date | number,
     endTime: Date | number
   ) {
-    const [record] = await UserVipModel.findOrCreate({
-      where: {
-        user_id: openid,
+    const order = await VipOrderModel.create({
+      order_no: null,
+      user_id: openid,
+      plan_id: type === 'infinity' ? 'infinity' : 'manual',
+      plan_snapshot: {
+        planId: type === 'infinity' ? 'infinity' : 'manual',
+        name: VIP_TYPE_NAMES[type] || '会员',
+        memberType: type,
+        durationDays: null,
+        priceCents: 0,
+        grantSource: 'manual',
       },
-      defaults: {
-        user_id: openid,
-        type,
-        available_start: new Date(startTime),
-        available_end: new Date(endTime),
-      },
+      amount_cents: 0,
+      currency: 'CNY',
+      status: VIP_ORDER_STATUS.GRANTED,
+      membership_start_at: new Date(startTime),
+      membership_end_at: type === 'infinity' ? null : new Date(endTime),
     });
-    record.type = type;
-    record.available_start = new Date(startTime);
-    record.available_end = new Date(endTime);
-    await record.save();
+    return this.toVipInfoFromOrder(order);
   }
 
   /**
@@ -676,22 +667,7 @@ export class VipService {
     if (!user) {
       throw new BusinessError('用户不存在', 404);
     }
-    const [record] = await UserVipModel.findOrCreate({
-      where: {
-        user_id: openid,
-      },
-      defaults: {
-        user_id: openid,
-        type: 'infinity',
-        available_start: now,
-        available_end: null,
-      },
-    });
-    record.type = 'infinity';
-    record.available_start = record.available_start || now;
-    record.available_end = null;
-    await record.save();
-    await VipOrderModel.findOrCreate({
+    const [order] = await VipOrderModel.findOrCreate({
       where: {
         user_id: openid,
         plan_id: 'infinity',
@@ -712,11 +688,11 @@ export class VipService {
         amount_cents: 0,
         currency: 'CNY',
         status: VIP_ORDER_STATUS.GRANTED,
-        membership_start_at: record.available_start,
+        membership_start_at: now,
         membership_end_at: null,
       },
     });
-    return this.toVipInfo(record, now);
+    return this.toVipInfoFromOrder(order);
   }
 
   async applyVirtualPayPurchase(input: VirtualPayVipPurchase) {
@@ -785,52 +761,27 @@ export class VipService {
         return order;
       }
 
-      const [vipRecord] = await UserVipModel.findOrCreate({
-        where: {
-          user_id: input.openid,
-        },
-        defaults: {
-          user_id: input.openid,
-          type: 'guest',
-          available_start: new Date(),
-          available_end: new Date(),
-        },
-        transaction: dbTransaction,
-      });
-      await vipRecord.reload({
-        transaction: dbTransaction,
-        lock: true,
-      });
-      const previousOrder = await VipOrderModel.findOne({
-        where: {
-          user_id: input.openid,
-          status: VIP_ORDER_STATUS.PAID,
-        },
-        order: [
-          ['paid_at', 'DESC'],
-          ['id', 'DESC'],
-        ],
-        transaction: dbTransaction,
-        lock: true,
-      });
-      const previousSnapshot = previousOrder
-        ? this.parsePlanSnapshot(previousOrder.plan_snapshot)
+      const previousMembership =
+        await this.vipMembershipService.getCurrentMembership(input.openid, {
+          transaction: dbTransaction,
+          lock: true,
+          includeExpired: true,
+        });
+      const previousSnapshot = previousMembership
+        ? this.parsePlanSnapshot(previousMembership.order.plan_snapshot)
         : {};
       const previousMemberType =
-        typeof previousSnapshot.memberType === 'string'
+        previousMembership?.type ||
+        (typeof previousSnapshot.memberType === 'string'
           ? previousSnapshot.memberType
-          : vipRecord.type;
-      const previousStart = previousOrder?.membership_start_at
-        ? new Date(previousOrder.membership_start_at)
-        : vipRecord.available_start;
-      const previousEnd = previousOrder?.membership_end_at
-        ? new Date(previousOrder.membership_end_at)
-        : vipRecord.available_end;
+          : 'guest');
+      const previousStart = previousMembership?.available_start || new Date();
+      const previousEnd = previousMembership?.available_end || previousStart;
       const now = new Date();
-      const isInfinity = vipRecord.type === 'infinity';
+      const isInfinity = previousMembership?.type === 'infinity';
       const extension = isInfinity
         ? {
-            membershipStart: previousStart || now,
+            membershipStart: previousStart,
             membershipEnd: null,
           }
         : calculateMembershipExtension(
@@ -844,16 +795,6 @@ export class VipService {
       const transactionId =
         input.transactionId || `XPAY-${input.outTradeNo}`.slice(0, 64);
 
-      await vipRecord.update(
-        {
-          type: isInfinity ? 'infinity' : product.memberType,
-          available_start: extension.membershipStart,
-          available_end: extension.membershipEnd,
-        },
-        {
-          transaction: dbTransaction,
-        }
-      );
       await order.update(
         {
           status: VIP_ORDER_STATUS.PAID,
@@ -931,18 +872,19 @@ export class VipService {
   }
 
   private async ensureGuestMembershipOrder(
-    record: UserVipModel,
-    guestValidityDays: number
+    openid: string,
+    guestValidityDays: number,
+    now = new Date()
   ) {
-    await VipOrderModel.findOrCreate({
+    const [order] = await VipOrderModel.findOrCreate({
       where: {
-        user_id: record.user_id,
+        user_id: openid,
         plan_id: 'guest',
         status: VIP_ORDER_STATUS.GRANTED,
       },
       defaults: {
         order_no: null,
-        user_id: record.user_id,
+        user_id: openid,
         plan_id: 'guest',
         plan_snapshot: {
           planId: 'guest',
@@ -955,10 +897,13 @@ export class VipService {
         amount_cents: 0,
         currency: 'CNY',
         status: VIP_ORDER_STATUS.GRANTED,
-        membership_start_at: record.available_start,
-        membership_end_at: record.available_end,
+        membership_start_at: now,
+        membership_end_at: new Date(
+          now.getTime() + guestValidityDays * 24 * 60 * 60 * 1000
+        ),
       },
     });
+    return order;
   }
 
   private async createLocalOrder(
@@ -1066,52 +1011,27 @@ export class VipService {
       throw new BusinessError('订单套餐快照损坏', 500);
     }
 
-    const [vipRecord] = await UserVipModel.findOrCreate({
-      where: {
-        user_id: order.user_id,
-      },
-      defaults: {
-        user_id: order.user_id,
-        type: 'guest',
-        available_start: new Date(),
-        available_end: new Date(),
-      },
-      transaction: dbTransaction,
-    });
-    await vipRecord.reload({
-      transaction: dbTransaction,
-      lock: true,
-    });
-    const previousOrder = await VipOrderModel.findOne({
-      where: {
-        user_id: order.user_id,
-        status: VIP_ORDER_STATUS.PAID,
-      },
-      order: [
-        ['paid_at', 'DESC'],
-        ['id', 'DESC'],
-      ],
-      transaction: dbTransaction,
-      lock: true,
-    });
-    const previousSnapshot = previousOrder
-      ? this.parsePlanSnapshot(previousOrder.plan_snapshot)
+    const previousMembership =
+      await this.vipMembershipService.getCurrentMembership(order.user_id, {
+        transaction: dbTransaction,
+        lock: true,
+        includeExpired: true,
+      });
+    const previousSnapshot = previousMembership
+      ? this.parsePlanSnapshot(previousMembership.order.plan_snapshot)
       : {};
     const previousMemberType =
-      typeof previousSnapshot.memberType === 'string'
+      previousMembership?.type ||
+      (typeof previousSnapshot.memberType === 'string'
         ? previousSnapshot.memberType
-        : vipRecord.type;
-    const previousStart = previousOrder?.membership_start_at
-      ? new Date(previousOrder.membership_start_at)
-      : vipRecord.available_start;
-    const previousEnd = previousOrder?.membership_end_at
-      ? new Date(previousOrder.membership_end_at)
-      : vipRecord.available_end;
+        : 'guest');
+    const previousStart = previousMembership?.available_start || new Date();
+    const previousEnd = previousMembership?.available_end || previousStart;
     const now = new Date();
-    const isInfinity = vipRecord.type === 'infinity';
+    const isInfinity = previousMembership?.type === 'infinity';
     const extension = isInfinity
       ? {
-          membershipStart: previousStart || now,
+          membershipStart: previousStart,
           membershipEnd: null,
         }
       : calculateMembershipExtension(
@@ -1128,16 +1048,6 @@ export class VipService {
       throw new BusinessError('微信支付成功时间格式错误', 400);
     }
 
-    await vipRecord.update(
-      {
-        type: isInfinity ? 'infinity' : snapshot.memberType,
-        available_start: extension.membershipStart,
-        available_end: extension.membershipEnd,
-      },
-      {
-        transaction: dbTransaction,
-      }
-    );
     await order.update(
       {
         status: VIP_ORDER_STATUS.PAID,
@@ -1253,85 +1163,12 @@ export class VipService {
           transaction: dbTransaction,
         }
       );
-      await this.refreshUserVipFromOrders(order.user_id, dbTransaction);
       await dbTransaction.commit();
       return refund;
     } catch (error) {
       await dbTransaction.rollback();
       throw error;
     }
-  }
-
-  private async refreshUserVipFromOrders(
-    openid: string,
-    dbTransaction: Transaction
-  ) {
-    const latestOrder = await VipOrderModel.findOne({
-      where: {
-        user_id: openid,
-        status: VIP_ORDER_STATUS.PAID,
-      },
-      order: [
-        ['paid_at', 'DESC'],
-        ['id', 'DESC'],
-      ],
-      transaction: dbTransaction,
-      lock: true,
-    });
-    const [vipRecord] = await UserVipModel.findOrCreate({
-      where: {
-        user_id: openid,
-      },
-      defaults: {
-        user_id: openid,
-        type: 'guest',
-        available_start: new Date(),
-        available_end: new Date(),
-      },
-      transaction: dbTransaction,
-    });
-    await vipRecord.reload({
-      transaction: dbTransaction,
-      lock: true,
-    });
-
-    if (vipRecord.type === 'infinity') {
-      return;
-    }
-    if (!latestOrder) {
-      const now = new Date();
-      await vipRecord.update(
-        {
-          type: 'guest',
-          available_start: now,
-          available_end: now,
-        },
-        {
-          transaction: dbTransaction,
-        }
-      );
-      return;
-    }
-    const snapshot = this.parsePlanSnapshot(latestOrder.plan_snapshot);
-    const memberType = this.getMemberType(snapshot, latestOrder.plan_id);
-    const start = latestOrder.membership_start_at
-      ? new Date(latestOrder.membership_start_at)
-      : latestOrder.paid_at
-      ? new Date(latestOrder.paid_at)
-      : new Date();
-    const end = latestOrder.membership_end_at
-      ? new Date(latestOrder.membership_end_at)
-      : new Date();
-    await vipRecord.update(
-      {
-        type: memberType,
-        available_start: start,
-        available_end: end,
-      },
-      {
-        transaction: dbTransaction,
-      }
-    );
   }
 
   private findLatestPaidOrder(openid: string) {
@@ -1348,20 +1185,18 @@ export class VipService {
   }
 
   private toVipInfoFromOrder(order: VipOrderModel) {
-    const snapshot = this.parsePlanSnapshot(order.plan_snapshot);
-    const type = this.getMemberType(snapshot, order.plan_id);
-    const start = order.membership_start_at
-      ? new Date(order.membership_start_at)
-      : null;
-    const end = order.membership_end_at
-      ? new Date(order.membership_end_at)
-      : null;
+    return this.toPublicVipInfo(
+      this.vipMembershipService.toMembershipInfo(order)
+    );
+  }
+
+  private toPublicVipInfo(info: VipMembershipInfo, now = new Date()) {
     return {
-      type,
-      name: String(snapshot.name || ''),
-      active: isVipActive(type, end),
-      available_start: start,
-      available_end: end,
+      type: info.type,
+      name: info.name,
+      active: isVipActive(info.type, info.available_end, now),
+      available_start: info.available_start,
+      available_end: info.available_end,
     };
   }
 
@@ -1379,16 +1214,6 @@ export class VipService {
       }
     }
     return {};
-  }
-
-  private getMemberType(snapshot: Record<string, any>, planId: string) {
-    const memberType = String(
-      snapshot.memberType ||
-        snapshot.member_type ||
-        PLAN_MEMBER_TYPES[planId] ||
-        'vip'
-    );
-    return memberType;
   }
 
   private normalizeRefundStatus(status: string | undefined) {
@@ -1436,20 +1261,6 @@ export class VipService {
       });
       throw new BusinessError('微信支付交易信息校验失败', 400);
     }
-  }
-
-  private toVipInfo(record: UserVipModel, now = new Date()) {
-    const end = record.available_end ? new Date(record.available_end) : null;
-    const active = isVipActive(record.type, end, now);
-    return {
-      type: record.type,
-      name: VIP_TYPE_NAMES[record.type] || '',
-      active,
-      available_start: record.available_start
-        ? new Date(record.available_start)
-        : null,
-      available_end: end,
-    };
   }
 
   private toOrderCreateResponse(order: VipOrderModel) {

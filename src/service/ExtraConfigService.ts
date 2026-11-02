@@ -6,12 +6,14 @@ export interface ExtraConfig {
   vipCheckEnabled: boolean;
   guestVipInitialization: boolean;
   guestValidityDays: number;
+  examCheckDailyLimit: number;
 }
 
 export const DEFAULT_EXTRA_CONFIG: Readonly<ExtraConfig> = Object.freeze({
   vipCheckEnabled: false,
   guestVipInitialization: true,
   guestValidityDays: 3,
+  examCheckDailyLimit: 5,
 });
 
 const EXTRA_CONFIG_PATH = join('/', 'config/extra_config.json');
@@ -58,6 +60,10 @@ export class ExtraConfigService {
         guestValidityDays: this.readPositiveInteger(
           parsed?.guestValidityDays,
           DEFAULT_EXTRA_CONFIG.guestValidityDays
+        ),
+        examCheckDailyLimit: this.readPositiveInteger(
+          parsed?.examCheckDailyLimit,
+          DEFAULT_EXTRA_CONFIG.examCheckDailyLimit
         ),
       };
     } catch (error) {
