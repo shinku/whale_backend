@@ -11,6 +11,7 @@ import { AIService } from '../service/AiService';
 import { PromptService } from '../service/PromptService';
 import { ImageTranslationDirection, QwenService } from '../service/QwenService';
 import { OssService } from '../service/OssService';
+import { buildUserOssPath } from '../service/utils/file';
 import Api from './api/Api';
 
 const MAX_TRANSLATE_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -235,10 +236,11 @@ export class Ai {
         'image/webp': 'webp',
       }[mime] || 'jpg';
     const fileName = `translate_${Date.now()}_${randomUUID()}.${extension}`;
+    const userId = this.ctx.vipCheck?.openid || this.ctx.get('x-user-id') || '';
+    const file = buildUserOssPath(userId, fileName);
     const result = await this.ossService.uploadStream({
       stream: Readable.from(Buffer.from(match[2], 'base64')),
-      fileName,
-      folderName: 'pub/ai-translate/',
+      fileName: file,
       forbidOverride: 'true',
     });
     if (!result) {
@@ -248,7 +250,7 @@ export class Ai {
         'TRANSLATE_IMAGE_UPLOAD_FAILED'
       );
     }
-    return `pub/ai-translate/${fileName}`;
+    return file;
   }
 
   private relativeSource(source: string) {

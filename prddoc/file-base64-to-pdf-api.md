@@ -94,7 +94,7 @@ async function imagesToPdf(base64List) {
   if (!res.ok || json.status !== 200) {
     throw new Error(json.message || '图片转PDF失败');
   }
-  return json.data; // "pub/1728381842163_42.7.pdf"
+  return json.data; // "pub/1731827391738912/1728381842163_ab12cd.pdf"
 }
 ```
 
@@ -125,7 +125,7 @@ const fileName = await imagesToPdf(list);
 ```json
 {
   "status": 200,
-  "data": "pub/1728381842163_42.7.pdf"
+  "data": "pub/1731827391738912/1728381842163_ab12cd.pdf"
 }
 ```
 

@@ -76,7 +76,7 @@ curl -X POST 'http://localhost:7001/api/file/base64_to_word' \
 ```js
 /**
  * @param {string} base64 单张图片 base64，可带 data URL 前缀
- * @returns {Promise<string>} 上传后的文件名，如 "pub/1728381842163_42.7.docx"
+ * @returns {Promise<string>} 上传后的文件名，如 "pub/1731827391738912/1728381842163_ab12cd.docx"
  */
 async function imageToWord(base64) {
   const res = await fetch('/api/file/base64_to_word', {
@@ -92,7 +92,7 @@ async function imageToWord(base64) {
   if (!res.ok || json.status !== 200) {
     throw new Error(json.message || '图片转Word失败');
   }
-  return json.data; // "pub/1728381842163_42.7.docx"
+  return json.data; // "pub/1731827391738912/1728381842163_ab12cd.docx"
 }
 ```
 
@@ -122,7 +122,7 @@ const fileName = await imageToWord(base64);
 ```json
 {
   "status": 200,
-  "data": "pub/1728381842163_42.7.docx"
+  "data": "pub/1731827391738912/1728381842163_ab12cd.docx"
 }
 ```
 

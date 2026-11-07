@@ -51,7 +51,7 @@ x-user-id: <openid>
 {
   "status": 200,
   "data": {
-    "source": "pub/ai-translate/translate_xxx.png",
+    "source": "pub/1731827391738912/translate_xxx.png",
     "result": [
       {
         "message": "这是一段翻译",
@@ -103,7 +103,7 @@ x-user-id: <openid>
 {
   "status": 200,
   "data": {
-    "source": "pub/ai-translate/translate_xxx.png",
+    "source": "pub/1731827391738912/translate_xxx.png",
     "result": [],
     "direction": "en_to_zh",
     "imageWidth": 1920,
@@ -130,7 +130,7 @@ GET /api/ai/subject/translate/{id}
 {
   "status": 200,
   "data": {
-    "source": "pub/ai-translate/translate_xxx.png",
+    "source": "pub/1731827391738912/translate_xxx.png",
     "result": [],
     "direction": "en_to_zh",
     "imageWidth": 1920,

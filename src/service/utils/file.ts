@@ -7,12 +7,35 @@ import {
   PageOrientation,
 } from 'docx';
 import { transformHtmlToDocx } from 'html-docxjs-compiler';
-import { dirname, join } from 'path';
+import { basename, dirname, join } from 'path';
 
 /** HTML -> Word 的转换策略 */
 // regural：基于 html-docxjs-compiler 把 HTML 解析成 docx 元素，稳定但不保证 100% 还原样式
 // pdfkit-convert：先 HTML -> PDF 保真渲染，再把 PDF 每页转成图片塞进 docx，样式还原度高但偶发报错
 export type HtmlToDocStrategy = 'regural' | 'pdfkit-convert';
+
+/**
+ * 所有用户产物统一放在 pub/<openid>/ 下。
+ * openid 和文件名都做路径安全处理，避免目录穿越。
+ */
+export function buildUserOssPath(userId: string, fileName: string) {
+  const safeUserId = String(userId || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .slice(0, 128);
+  const safeFileName = basename(String(fileName || ''))
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .slice(0, 180);
+  if (
+    !safeUserId ||
+    !safeFileName ||
+    safeFileName === '.' ||
+    safeFileName === '..'
+  ) {
+    throw new Error('userId and fileName are required');
+  }
+  return `pub/${safeUserId}/${safeFileName}`;
+}
 
 /** 1 pt = 20 twips（Word 页面尺寸单位） */
 const PT_TO_TWIP = 20;

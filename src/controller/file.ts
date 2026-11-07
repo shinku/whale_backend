@@ -29,6 +29,7 @@ import { ErrorCollectService } from '../service/ErrorCollectService';
 import { FileService } from '../service/FileService';
 import { ImageService } from '../service/ImageService';
 import { OssService } from '../service/OssService';
+import { buildUserOssPath } from '../service/utils/file';
 import Api from './api/Api';
 
 export type TActionType =
@@ -140,9 +141,14 @@ export class FileController {
     }
     const filePath = files[0].data;
     if (filePath) {
+      const userId = this.requireUserId();
+      const fileName = buildUserOssPath(
+        userId,
+        filePath.split('/').pop() || `upload_${Date.now()}`
+      );
       const result = await this.ossService.uploadFile({
         filePath: filePath,
-        fileName: filePath.split('/').pop(),
+        fileName,
       });
       return result;
     } else {
@@ -175,10 +181,7 @@ export class FileController {
     fields: Record<string, any>,
     action: 'clear_hands_write' | 'convert_file'
   ) {
-    const userId = this.ctx.get('x-user-id');
-    if (!userId) {
-      throw new Error('userId is required');
-    }
+    const userId = this.requireUserId();
     const fileUrl = fields?.file_url || this.ctx.request.body?.file_url;
     const data = files ? readFileSync(join(files[0].data)) : null;
 
@@ -188,7 +191,9 @@ export class FileController {
           throw new Error('data file is required');
         }
         const result = await this.imageService.eraserHandWriteImage(data);
-        const filename = userId + Math.random() * 100 + 'after.jpg';
+        const filename = `${Date.now()}_${Math.random()
+          .toString(36)
+          .slice(2, 8)}_after.jpg`;
         if (result.data.code === 40003) {
           return {
             code: 40003,
@@ -196,14 +201,14 @@ export class FileController {
           };
         }
         const stream = base64ToStream(result.data?.result?.image);
+        const file = buildUserOssPath(userId, filename);
         await this.ossService.uploadStream({
           stream,
-          fileName: filename,
+          fileName: file,
           forbidOverride: 'true',
-          folderName: 'pub/',
         });
         return {
-          file: 'pub/' + filename,
+          file,
         };
       }
       case 'convert_file': {
@@ -324,6 +329,7 @@ export class FileController {
     middleware: [VipCheckMiddleware, FileRecordMiddleware],
   })
   async doExpend2File() {
+    const userId = this.requireUserId();
     /**
      * 基于request的file_urls参数
      */
@@ -338,13 +344,16 @@ export class FileController {
     switch (to_type) {
       case 'pdf': {
         const stream = await this.imageService.tiImageToPdf(fileUrls);
-        const fileName = `pub/${Date.now()}_${Math.random() * 100}.pdf`;
+        const fileName = `${Date.now()}_${Math.random()
+          .toString(36)
+          .slice(2, 8)}.pdf`;
+        const file = buildUserOssPath(userId, fileName);
         await this.ossService.uploadStream({
           stream: Stream.Readable.from(stream),
-          fileName: fileName,
+          fileName: file,
           forbidOverride: 'true',
         });
-        return fileName;
+        return file;
       }
       case 'docx': {
         // 将图片合并为pdf
@@ -363,14 +372,13 @@ export class FileController {
         // 将doc文件上传到oss
         await this.ossService.uploadFile({
           filePath: docxPath,
-          fileName: docFileName,
+          fileName: buildUserOssPath(userId, docFileName),
           forbidOverride: 'true',
-          folderName: 'pub/',
         });
         unlink(docxPath, (...params) => {
           console.log('unlink pdf', params);
         });
-        return 'pub/' + docFileName;
+        return buildUserOssPath(userId, docFileName);
         //return result;
       }
     }
@@ -386,18 +394,22 @@ export class FileController {
     middleware: [VipCheckMiddleware, FileRecordMiddleware],
   })
   async base64ToPdf() {
+    const userId = this.requireUserId();
     const base64List = this.ctx.request.body.base64_list;
     if (!base64List || base64List.length === 0) {
       throw new Error('base64_list is empty');
     }
     const stream = await this.imageService.tiBase64ImageToPdf(base64List);
-    const fileName = `pub/${Date.now()}_${Math.random() * 100}.pdf`;
+    const fileName = `${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}.pdf`;
+    const file = buildUserOssPath(userId, fileName);
     await this.ossService.uploadStream({
       stream: Stream.Readable.from(stream),
-      fileName: fileName,
+      fileName: file,
       forbidOverride: 'true',
     });
-    return fileName;
+    return file;
   }
 
   /**
@@ -410,18 +422,22 @@ export class FileController {
     middleware: [VipCheckMiddleware, FileRecordMiddleware],
   })
   async base64ToWord() {
+    const userId = this.requireUserId();
     const base64 = this.ctx.request.body.base64;
     if (!base64) {
       throw new Error('base64 is empty');
     }
     const buffer = await this.imageService.tiBase64ImageToWord(base64);
-    const fileName = `pub/${Date.now()}_${Math.random() * 100}.docx`;
+    const fileName = `${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}.docx`;
+    const file = buildUserOssPath(userId, fileName);
     await this.ossService.uploadStream({
       stream: Stream.Readable.from(buffer),
-      fileName: fileName,
+      fileName: file,
       forbidOverride: 'true',
     });
-    return fileName;
+    return file;
   }
 
   /**
@@ -429,28 +445,26 @@ export class FileController {
    * {
    *  "base64": "data:image/png;base64,..."
    * }
-   * 上传位置：pub/base64_convert/<时间戳>_<随机数>.png
+   * 上传位置：pub/<openid>/<时间戳>_<随机数>.png
    */
   @Post('/base64_to_image')
   async base64ToImage() {
-    const userId = this.ctx.get('x-user-id');
-    if (!userId) {
-      throw new Error('userId is required');
-    }
+    const userId = this.requireUserId();
     const base64 = this.ctx.request.body?.base64;
     if (!base64) {
       throw new Error('base64 is empty');
     }
     const buffer = base64ToBuffer(base64);
-    const fileName = `pub/base64_convert/${Date.now()}_${
-      Math.random() * 100
-    }.png`;
+    const fileName = `${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}.png`;
+    const file = buildUserOssPath(userId, fileName);
     await this.ossService.uploadStream({
       stream: Stream.Readable.from(buffer),
-      fileName: fileName,
+      fileName: file,
       forbidOverride: 'true',
     });
-    return fileName;
+    return file;
   }
 
   /**
@@ -500,7 +514,7 @@ export class FileController {
    *     -H 'Content-Type: application/json' -H 'x-user-id: <openid>' \
    *     -d '{"html":"<h1>标题</h1><p>正文</p>","toStrategy":"pdfkit-convert"}'
    *
-   * 返回：{ "status": 200, "data": "pub/<时间戳>_<随机数>.docx" }
+   * 返回：{ "status": 200, "data": "pub/<openid>/<时间戳>_<随机数>.docx" }
    */
   @Post('/html_to_doc', {
     middleware: [FileRecordMiddleware],
@@ -523,18 +537,22 @@ export class FileController {
     ext: 'pdf' | 'docx';
     build: (html: string) => Buffer | Promise<Buffer>;
   }) {
+    const userId = this.requireUserId();
     const html = this.ctx.request.body.html;
     if (!html) {
       throw new Error('html is empty');
     }
     const buffer = await option.build(html);
-    const fileName = `pub/${Date.now()}_${Math.random() * 100}.${option.ext}`;
+    const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${
+      option.ext
+    }`;
+    const file = buildUserOssPath(userId, fileName);
     await this.ossService.uploadStream({
       stream: Stream.Readable.from(buffer),
-      fileName: fileName,
+      fileName: file,
       forbidOverride: 'true',
     });
-    return fileName;
+    return file;
   }
 
   /*@Get('/test_file')
@@ -554,6 +572,7 @@ export class FileController {
     middleware: [VipCheckMiddleware, FileRecordMiddleware],
   })
   async text2Word() {
+    const userId = this.requireUserId();
     const text = this.ctx.request.body.text;
     console.log('text', text);
     if (!text) {
@@ -571,14 +590,13 @@ export class FileController {
     // 将doc文件上传到oss
     await this.ossService.uploadFile({
       filePath: docxPath,
-      fileName: docFileName,
+      fileName: buildUserOssPath(userId, docFileName),
       forbidOverride: 'true',
-      folderName: 'pub/',
     });
     unlink(docxPath, (...params) => {
       console.log('unlink pdf', params);
     });
-    return 'pub/' + docFileName;
+    return buildUserOssPath(userId, docFileName);
   }
 
   async createWordDocument(text: string, filePath: string) {
@@ -597,5 +615,14 @@ export class FileController {
 
     const buffer = await Packer.toBuffer(doc);
     writeFileSync(filePath, buffer);
+  }
+
+  private requireUserId() {
+    const userId =
+      this.ctx.vipCheck?.openid || this.ctx.userId || this.ctx.get('x-user-id');
+    if (!userId) {
+      throw new Error('userId is required');
+    }
+    return userId;
   }
 }

@@ -125,7 +125,7 @@ async function htmlToPdf(html, options = {}) {
   if (!res.ok || json.status !== 200) {
     throw new Error(json.message || 'HTML转PDF失败');
   }
-  return json.data; // "pub/1728381842163_42.7.pdf"
+  return json.data; // "pub/1731827391738912/1728381842163_ab12cd.pdf"
 }
 
 async function htmlToDoc(html, toStrategy = 'regural') {
@@ -141,7 +141,7 @@ async function htmlToDoc(html, toStrategy = 'regural') {
   if (!res.ok || json.status !== 200) {
     throw new Error(json.message || 'HTML转Word失败');
   }
-  return json.data; // "pub/1728381842163_42.7.docx"
+  return json.data; // "pub/1731827391738912/1728381842163_ab12cd.docx"
 }
 ```
 
@@ -150,11 +150,11 @@ async function htmlToDoc(html, toStrategy = 'regural') {
 ### 4.1 成功响应
 
 ```json
-{ "status": 200, "data": "pub/1728381842163_42.7.pdf" }
+{ "status": 200, "data": "pub/1731827391738912/1728381842163_ab12cd.pdf" }
 ```
 
 ```json
-{ "status": 200, "data": "pub/1728381842163_42.7.docx" }
+{ "status": 200, "data": "pub/1731827391738912/1728381842163_ab12cd.docx" }
 ```
 
 | 字段     | 类型   | 说明                                                                   |

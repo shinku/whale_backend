@@ -18,6 +18,9 @@ describe('Ai subject translate', () => {
           direction: 'zh_to_pinyin',
         },
       },
+      get: jest.fn((name: string) =>
+        name === 'x-user-id' ? 'openid-1' : undefined
+      ),
     } as any;
     const imageTranslate = jest.fn().mockResolvedValue([
       {
@@ -37,7 +40,9 @@ describe('Ai subject translate', () => {
 
     await expect(controller.translateSubject()).resolves.toEqual({
       data: {
-        source: expect.stringMatching(/^pub\/ai-translate\/translate_.+\.png$/),
+        source: expect.stringMatching(
+          /^pub\/openid-1\/translate_.+\.png$/
+        ),
         result: [
           {
             message: '这是一段翻译',
@@ -61,14 +66,16 @@ describe('Ai subject translate', () => {
     });
     expect(uploadStream).toHaveBeenCalledWith(
       expect.objectContaining({
-        folderName: 'pub/ai-translate/',
+        fileName: expect.stringMatching(
+          /^pub\/openid-1\/translate_.+\.png$/
+        ),
         forbidOverride: 'true',
       })
     );
     expect(create).toHaveBeenCalledWith({
       requestid: expect.any(String),
       store_content: expect.stringMatching(
-        /"source":"pub\/ai-translate\//
+        /"source":"pub\/openid-1\//
       ),
     });
     expect(create.mock.calls[0][0].store_content).not.toContain(
@@ -115,7 +122,7 @@ describe('Ai subject translate', () => {
       createdAt: new Date(),
       store_content: JSON.stringify({
         source:
-          'https://fms.whalepea.com/pub/ai-translate/translate_existing.png',
+          'https://fms.whalepea.com/pub/openid-1/translate_existing.png',
         imageWidth: 1920,
         imageHeight: 1080,
         result: [
@@ -134,7 +141,7 @@ describe('Ai subject translate', () => {
       controller.getTranslatedSubject('translation-id')
     ).resolves.toEqual({
       data: {
-        source: 'pub/ai-translate/translate_existing.png',
+        source: 'pub/openid-1/translate_existing.png',
         result: [
           {
             message: '这是一段翻译',

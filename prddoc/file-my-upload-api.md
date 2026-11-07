@@ -95,9 +95,9 @@ async function getMyUploads({ page = 1, limit = 20, lane = 'whale' } = {}) {
   "list": [
     {
       "id": 128,
-      "file": "pub/1761283200000_42.7.pdf",
-      "image_url_after": "pub/1761283200000_42.7.pdf",
-      "url": "https://fms.whalepea.com/pub/1761283200000_42.7.pdf",
+      "file": "pub/1731827391738912/1761283200000_ab12cd.pdf",
+      "image_url_after": "pub/1731827391738912/1761283200000_ab12cd.pdf",
+      "url": "https://fms.whalepea.com/pub/1731827391738912/1761283200000_ab12cd.pdf",
       "lane": "whale",
       "createdAt": "2026-10-24T08:00:00.000Z"
     }
@@ -115,7 +115,7 @@ async function getMyUploads({ page = 1, limit = 20, lane = 'whale' } = {}) {
 | `count` | number | 当前用户、当前 lane 下的文件总数 |
 | `list` | array | 当前页文件列表，按 ID 倒序 |
 | `list[].id` | number | 文件记录 ID，可直接作为前端列表 key |
-| `list[].file` | string | OSS 对象路径，例如 `pub/xxx.pdf` |
+| `list[].file` | string | OSS 对象路径，例如 `pub/<openid>/xxx.pdf` |
 | `list[].image_url_after` | string | 兼容旧字段，值与 `file` 相同 |
 | `list[].url` | string | 文件直链，可直接用于预览或下载 |
 | `list[].lane` | string | 业务线 |

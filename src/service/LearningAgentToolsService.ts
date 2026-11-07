@@ -1,7 +1,6 @@
 import { Inject, Provide, Scope, ScopeEnum } from '@midwayjs/core';
 import { tool } from '@langchain/core/tools';
 import axios from 'axios';
-import { createHash } from 'crypto';
 import { Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx';
 import { Readable } from 'stream';
 import { z } from 'zod';
@@ -19,9 +18,9 @@ import { ErrorCollectService } from './ErrorCollectService';
 import { FileService } from './FileService';
 import { ImageService } from './ImageService';
 import { OssService } from './OssService';
+import { buildUserOssPath } from './utils/file';
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const OUTPUT_PREFIX = 'pub/agent/';
 
 export interface LearningAgentToolContext {
   profile: AgentUserProfile;
@@ -389,23 +388,18 @@ export class LearningAgentToolsService {
     buffer: Buffer,
     extension: string
   ) {
-    const userKey = createHash('sha256')
-      .update(openid)
-      .digest('hex')
-      .slice(0, 12);
-    const fileName = `${userKey}_${Date.now()}_${Math.random()
+    const fileName = `${Date.now()}_${Math.random()
       .toString(36)
       .slice(2, 8)}.${extension}`;
+    const file = buildUserOssPath(openid, fileName);
     const result = await this.ossService.uploadStream({
       stream: Readable.from(buffer),
-      fileName,
-      folderName: OUTPUT_PREFIX,
+      fileName: file,
       forbidOverride: 'true',
     });
     if (!result) {
       throw new Error('文件上传失败');
     }
-    const file = `${OUTPUT_PREFIX}${fileName}`;
     return {
       file,
       url: this.fileUrl(file),

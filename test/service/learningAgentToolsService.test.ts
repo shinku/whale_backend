@@ -131,14 +131,14 @@ describe('LearningAgentToolsService', () => {
       })
     ).resolves.toMatchObject({
       ok: true,
-      file: expect.stringMatching(/^pub\/agent\/.+\.jpg$/),
-      url: expect.stringContaining('https://fms.whalepea.com/pub/agent/'),
+      file: expect.stringMatching(/^pub\/openid-1\/.+\.jpg$/),
+      url: expect.stringContaining('https://fms.whalepea.com/pub/openid-1/'),
     });
     expect(UserRecordModel.create).toHaveBeenCalledWith(
       expect.objectContaining({
         user_id: 'openid-1',
         lane: 'whale',
-        image_url_after: expect.stringMatching(/^pub\/agent\//),
+        image_url_after: expect.stringMatching(/^pub\/openid-1\//),
       })
     );
   });

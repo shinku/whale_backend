@@ -6,6 +6,7 @@ import { ImageService } from './ImageService';
 import { OssService } from './OssService';
 import { PlaywrightService } from './PlaywrightService';
 import {
+  buildUserOssPath,
   HtmlToDocStrategy,
   htmlToDocx,
   pdfBufferToDocx,
@@ -128,7 +129,9 @@ export class FileService {
         }
 
         const uploadedDoc = await this.imageService.tiPdfToDocx(stream);
-        const docFileName = `${option.userId}_${Date.now()}.docx`;
+        const docFileName = `${Date.now()}_${Math.random()
+          .toString(36)
+          .slice(2, 8)}.docx`;
         if (!existsSync(join(this.outputDir, 'tmp'))) {
           mkdirSync(join(this.outputDir, 'tmp'));
         }
@@ -136,14 +139,13 @@ export class FileService {
         writeFileSync(docxPath, uploadedDoc);
         await this.ossService.uploadFile({
           filePath: docxPath,
-          fileName: docFileName,
+          fileName: buildUserOssPath(option.userId, docFileName),
           forbidOverride: 'true',
-          folderName: 'pub/',
         });
         unlink(docxPath, (...params) => {
           console.log('unlink pdf', params);
         });
-        return 'pub/' + docFileName;
+        return buildUserOssPath(option.userId, docFileName);
       }
     }
   }

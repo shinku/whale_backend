@@ -55,10 +55,10 @@
 上传后的对象名固定为：
 
 ```
-pub/base64_convert/<时间戳>_<随机数>.png
+pub/<openid>/<时间戳>_<随机数>.png
 ```
 
-例如 `pub/base64_convert/1728381842163_42.7.png`。
+例如 `pub/1731827391738912/1728381842163_ab12cd.png`。
 
 > 注意：**后缀固定为 `.png`**。如果传入的是 jpg/webp 等其它格式，文件名仍会以 `.png` 结尾，
 > 但图片的字节内容与格式不会被改动。若需要严格一致的后缀，请自行在上游统一成 PNG 再传。
@@ -81,7 +81,7 @@ curl -X POST 'http://localhost:7001/api/file/base64_to_image' \
 ```js
 /**
  * @param {string} base64 单张图片 base64，可带 data URL 前缀
- * @returns {Promise<string>} 上传后的文件名，如 "pub/base64_convert/1728381842163_42.7.png"
+ * @returns {Promise<string>} 上传后的文件名，如 "pub/1731827391738912/1728381842163_ab12cd.png"
  */
 async function uploadBase64Image(base64) {
   const res = await fetch('/api/file/base64_to_image', {
@@ -97,7 +97,7 @@ async function uploadBase64Image(base64) {
   if (!res.ok || json.status !== 200) {
     throw new Error(json.message || '图片上传失败');
   }
-  return json.data; // "pub/base64_convert/1728381842163_42.7.png"
+  return json.data; // "pub/1731827391738912/1728381842163_ab12cd.png"
 }
 ```
 
@@ -127,7 +127,7 @@ const fileName = await uploadBase64Image(base64);
 ```json
 {
   "status": 200,
-  "data": "pub/base64_convert/1728381842163_42.7.png"
+  "data": "pub/1731827391738912/1728381842163_ab12cd.png"
 }
 ```
 
