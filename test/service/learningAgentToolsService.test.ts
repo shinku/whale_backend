@@ -67,7 +67,9 @@ describe('LearningAgentToolsService', () => {
         code: 0,
         message: 'ok',
         data: {
-          structure_result: [{ block_type: 'wrong_question', location: [1, 2] }],
+          structure_result: [
+            { block_type: 'wrong_question', location: [1, 2] },
+          ],
         },
       }),
     } as any;

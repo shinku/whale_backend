@@ -23,11 +23,11 @@ SET NAMES utf8mb4;
 CREATE TABLE IF NOT EXISTS `ai_subject_store` (
   `id` int NOT NULL AUTO_INCREMENT,
   `requestid` varchar(64) NOT NULL COMMENT '接口返回给前端的唯一请求 id（uuid）',
-  `store_content` text NOT NULL COMMENT '出题结果（模型返回的纯文本）',
+  `store_content` text NOT NULL COMMENT '出题或图片翻译结果',
   `createdAt` datetime NOT NULL,
   `updatedAt` datetime NOT NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_ai_subject_store_requestid` (`requestid`)
+  UNIQUE KEY `idx_ai_subject_store_requestid` (`requestid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI 出题结果存储，有效期 24 小时';
 
 CREATE TABLE IF NOT EXISTS `vip_plan` (

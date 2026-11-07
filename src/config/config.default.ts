@@ -14,6 +14,14 @@ export default (appInfo: MidwayAppInfo) => {
         enable: false,
       },
     },
+    session: {
+      key: 'whale.sess',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      httpOnly: true,
+      signed: true,
+      overwrite: true,
+      sameSite: 'lax',
+    },
     egg: {
       port: 7001,
       hostname: '0.0.0.0',

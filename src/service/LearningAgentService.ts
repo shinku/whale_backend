@@ -1,11 +1,16 @@
 import { Config, Inject, Provide, Scope, ScopeEnum } from '@midwayjs/core';
 import { HumanMessage } from '@langchain/core/messages';
 import { createHash, randomUUID } from 'crypto';
-import { createDeepAgent, FilesystemBackend } from 'deepagents';
+import {
+  createDeepAgent,
+  FilesystemBackend,
+  FilesystemPermission,
+} from 'deepagents';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
 import { BusinessError } from '../core/errors';
 import { AgentUserProfile } from './UserService';
+import { DeepSeekService } from './DeepSeekService';
 import { PromptService } from './PromptService';
 import { QwenService } from './QwenService';
 import {
@@ -19,10 +24,37 @@ const DEFAULT_RECURSION_LIMIT = 40;
 const MAX_HISTORY_MESSAGES = 20;
 const MAX_AGENT_IMAGE_BYTES = 10 * 1024 * 1024;
 
+export const LEARNING_AGENT_FILESYSTEM_PERMISSIONS: FilesystemPermission[] = [
+  {
+    operations: ['read', 'write'],
+    paths: [
+      '/etc/**',
+      '/proc/**',
+      '/sys/**',
+      '/dev/**',
+      '/root/**',
+      '/var/**',
+      '/System/**',
+      '/Library/**',
+      '/Applications/**',
+      '/Users/**',
+      '/private/**',
+      '/bin/**',
+      '/sbin/**',
+      '/usr/**',
+    ],
+    mode: 'deny',
+  },
+  {
+    operations: ['read', 'write'],
+    paths: ['/**'],
+    mode: 'allow',
+  },
+];
+
 export interface LearningAgentChatInput {
   message: string;
   imageBase64?: string;
-  conversationId?: string;
   history?: LearningAgentHistoryMessage[];
 }
 
@@ -30,7 +62,6 @@ export type LearningAgentSseEvent =
   | {
       type: 'session';
       requestId: string;
-      conversationId: string;
       userId: string;
       user: {
         userName: string | null;
@@ -38,11 +69,6 @@ export type LearningAgentSseEvent =
         vipActive: boolean;
       };
       format: 'json';
-    }
-  | {
-      type: 'thinking';
-      content: string;
-      format: 'markdown';
     }
   | {
       type: 'execution';
@@ -60,7 +86,6 @@ export type LearningAgentSseEvent =
   | {
       type: 'done';
       requestId: string;
-      conversationId: string;
       durationMs: number;
     }
   | {
@@ -87,15 +112,18 @@ export class LearningAgentService {
   toolsService!: LearningAgentToolsService;
 
   @Inject()
+  deepSeekService!: DeepSeekService;
+
+  @Inject()
   promptService!: PromptService;
 
   async *streamChat(
     input: LearningAgentChatInput,
-    profile: AgentUserProfile
+    profile: AgentUserProfile,
+    userOrinted = ''
   ): AsyncGenerator<string, void, void> {
     const startedAt = Date.now();
     const requestId = randomUUID();
-    const conversationId = this.conversationId(input.conversationId);
     const controller = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -106,7 +134,6 @@ export class LearningAgentService {
     yield encodeAgentSse({
       type: 'session',
       requestId,
-      conversationId,
       userId: profile.openid,
       user: {
         userName: profile.userName,
@@ -119,8 +146,9 @@ export class LearningAgentService {
     try {
       const agent = this.createAgent(
         profile,
-        conversationId,
-        input.history || []
+        input.history || [],
+        Boolean(input.imageBase64),
+        userOrinted.trim()
       );
       const messages = this.buildMessages(input);
       const events: AsyncIterable<any> = (await agent.streamEvents(
@@ -130,7 +158,7 @@ export class LearningAgentService {
           recursionLimit: DEFAULT_RECURSION_LIMIT,
           signal: controller.signal,
           configurable: {
-            thread_id: conversationId,
+            thread_id: requestId,
             user_id: profile.openid,
           },
         } as any
@@ -144,15 +172,6 @@ export class LearningAgentService {
       for await (const event of events) {
         if (event.event === 'on_chat_model_stream') {
           const chunk = event.data?.chunk;
-          const reasoning = this.reasoningOf(chunk);
-          if (reasoning) {
-            yield encodeAgentSse({
-              type: 'thinking',
-              content: reasoning,
-              format: 'markdown',
-            });
-          }
-
           const content = this.messageContent(chunk);
           if (!content) {
             continue;
@@ -271,7 +290,6 @@ export class LearningAgentService {
       yield encodeAgentSse({
         type: 'done',
         requestId,
-        conversationId,
         durationMs: Date.now() - startedAt,
       });
     } catch (error: unknown) {
@@ -288,7 +306,6 @@ export class LearningAgentService {
         : '学习助手执行失败';
       console.error('[learningAgent] stream failed', {
         requestId,
-        conversationId,
         status,
         code,
         message,
@@ -307,7 +324,7 @@ export class LearningAgentService {
     }
   }
 
-  buildSystemPrompt(profile: AgentUserProfile) {
+  buildSystemPrompt(profile: AgentUserProfile, userOrinted?: string) {
     const userContext = {
       userId: profile.openid,
       userName: profile.userName,
@@ -321,31 +338,94 @@ export class LearningAgentService {
 
     return this.promptService
       .getPromptSync('aichat/chat')
-      .replace('{{USER_CONTEXT}}', JSON.stringify(userContext, null, 2));
+      .replace('{{USER_CONTEXT}}', JSON.stringify(userContext, null, 2))
+      .replace(
+        '{{USER_ORINTED}}',
+        userOrinted?.trim() || '暂无，请根据历史或当前消息总结。'
+      );
+  }
+
+  async prepareUserOrinted(input: LearningAgentChatInput, existing?: string) {
+    const current = String(existing || '')
+      .trim()
+      .slice(0, 500);
+
+    const userHistory = (input.history || [])
+      .filter(item => item.role === 'user')
+      .slice(-6)
+      .map(item => item.content.slice(0, 1000));
+    const prompt = [
+      `已保存的 user_orinted：${current || '无'}`,
+      `最近用户消息：${
+        userHistory.length ? userHistory.join('\n---\n') : '无'
+      }`,
+      `当前用户消息：${input.message}`,
+      '如果当前消息明确开始了新的学习任务，请生成新的摘要；如果没有明确变化，必须原样返回已保存的 user_orinted。',
+      '只返回一句简洁英文，不超过 200 个字符，不要 Markdown、解释或前缀。',
+    ].join('\n\n');
+    try {
+      const summary = await this.deepSeekService.chatWithDeepSeek(
+        prompt,
+        'You summarize the user current learning task in English only. Return one concise English sentence. If no clear task change is stated, return the saved user_orinted unchanged. No Markdown or explanation.'
+      );
+      const normalized = String(summary || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 500);
+      if (normalized && !/[\u3400-\u9fff]/.test(normalized)) {
+        return normalized;
+      }
+    } catch (error) {
+      console.warn('[learningAgent] userOrinted summary failed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    if (current) {
+      return current;
+    }
+    const fallback = userHistory[userHistory.length - 1] || input.message;
+    return `The user is currently studying: ${fallback
+      .replace(/[\u3400-\u9fff]+/g, 'K-12 learning content')
+      .replace(/\s+/g, ' ')
+      .slice(0, 180)}`;
   }
 
   private createAgent(
     profile: AgentUserProfile,
-    conversationId: string,
-    history: LearningAgentHistoryMessage[]
+    history: LearningAgentHistoryMessage[],
+    hasImage: boolean,
+    userOrinted: string
   ) {
-    const workspace = this.workspacePath(profile.openid, conversationId);
-    mkdirSync(workspace, { recursive: true });
-    const model = this.qwenService.createAgentChatModel({
-      enableThinking: false,
-    });
-    const context: LearningAgentToolContext = { profile, history };
+    const backend = this.createSandboxBackend(profile.openid);
+    const model = this.createAgentModel(hasImage);
+    const context: LearningAgentToolContext = {
+      profile,
+      history,
+    };
     return createDeepAgent({
       name: 'whale-learning-agent',
       model,
       tools: this.toolsService.buildTools(context) as any,
-      systemPrompt: this.buildSystemPrompt(profile),
-      backend: new FilesystemBackend({
-        rootDir: workspace,
-        virtualMode: true,
-        maxFileSizeMb: 5,
-      }),
+      systemPrompt: this.buildSystemPrompt(profile, userOrinted),
+      backend,
+      permissions: LEARNING_AGENT_FILESYSTEM_PERMISSIONS,
     });
+  }
+
+  private createSandboxBackend(openid: string) {
+    const workspace = this.workspacePath(openid);
+    mkdirSync(workspace, { recursive: true });
+    return new FilesystemBackend({
+      rootDir: workspace,
+      virtualMode: true,
+      maxFileSizeMb: 5,
+    });
+  }
+
+  private createAgentModel(hasImage: boolean) {
+    return hasImage
+      ? this.qwenService.createAgentChatModel({ enableThinking: false })
+      : this.deepSeekService.createAgentChatModel();
   }
 
   private buildMessages(input: LearningAgentChatInput) {
@@ -373,19 +453,8 @@ export class LearningAgentService {
     return messages;
   }
 
-  private conversationId(value?: string) {
-    const normalized = String(value || '')
-      .trim()
-      .replace(/[^a-zA-Z0-9_-]/g, '')
-      .slice(0, 64);
-    return normalized || randomUUID();
-  }
-
-  private workspacePath(openid: string, conversationId: string) {
-    const key = createHash('sha256')
-      .update(`${openid}\0${conversationId}`)
-      .digest('hex')
-      .slice(0, 32);
+  private workspacePath(openid: string) {
+    const key = createHash('sha256').update(openid).digest('hex').slice(0, 32);
     return join(this.appDir, 'output', 'learning-agent', key);
   }
 
@@ -407,21 +476,6 @@ export class LearningAgentService {
         }
         return '';
       })
-      .join('');
-  }
-
-  private reasoningOf(message: any): string {
-    const direct = message?.additional_kwargs?.reasoning_content;
-    if (typeof direct === 'string') {
-      return direct;
-    }
-    const content = message?.content;
-    if (!Array.isArray(content)) {
-      return '';
-    }
-    return content
-      .filter(block => block?.type === 'reasoning')
-      .map(block => block.reasoning || block.text || '')
       .join('');
   }
 
@@ -523,10 +577,6 @@ export function validateLearningAgentInput(
   return {
     message,
     imageBase64: normalizeAgentImageBase64(imageSource),
-    conversationId:
-      typeof body?.conversationId === 'string'
-        ? body.conversationId
-        : undefined,
     history,
   };
 }

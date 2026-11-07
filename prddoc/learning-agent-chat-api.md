@@ -1,6 +1,6 @@
 # AI 学习助手聊天接口（React / H5 对接文档）
 
-该接口基于 Qwen3.7 + DeepAgent，提供面向小学到高中学生的学习辅导、学习计划、出题与答案核验能力。服务端通过 Server-Sent Events（SSE）输出工具执行过程和最终 Markdown 回答。Qwen thinking 默认关闭以减少 output token；显式启用后才会额外输出 thinking 事件。
+该接口基于 Qwen3.7 / DeepSeek + DeepAgent，提供面向小学到高中学生的学习辅导、学习计划、出题与答案核验能力。服务端通过 Server-Sent Events（SSE）输出工具执行过程和最终 Markdown 回答，不向前端返回 thinking 过程。
 
 ## 1. 接口概览
 
@@ -12,7 +12,7 @@
 | 用户身份 | `x-user-id: <openid>`                       |
 | 可选分组 | `x-lane: whale`，默认 `whale`               |
 | 超时时间 | 服务端最长约 5 分钟                         |
-| 输出格式 | thinking（可选）、execution、answer 为 Markdown |
+| 输出格式 | execution、answer 为 Markdown                    |
 
 当前版本只接受 `x-user-id`，并会查询用户表校验 openid 是否有效；不接受
 `x-openid` 作为替代字段。后续切换 token 或网关注入身份时会统一调整这一层验证。
@@ -29,7 +29,6 @@ Accept: text/event-stream
 {
   "message": "帮我制定一周的初二数学复习计划",
   "imageBase64": "data:image/jpeg;base64,/9j/4AAQSkZJRg...",
-  "conversationId": "conversation-123",
   "history": [
     {
       "role": "user",
@@ -49,7 +48,6 @@ Accept: text/event-stream
 | ---------------- | ---- | ------------------------------------------------------- |
 | `message`        | 是   | 用户本轮消息，最多 8000 字符                            |
 | `imageBase64`    | 否   | 最多一张题目图片，支持 Data URL 或裸 Base64，最大 10MB   |
-| `conversationId` | 否   | 前端会话 ID；不传时服务端生成一个                       |
 | `history`        | 否   | 最近对话，最多采用最后 20 条；单条最多 8000 字符         |
 
 `history` 由前端提交，但不会每轮直接拼进模型上下文。服务端会把它作为当前 Agent
@@ -74,8 +72,7 @@ data: {"type":"answer","content":"## 解题思路\n\n...","format":"markdown"}
 
 | `event` / `type` | 说明                                               |
 | ---------------- | -------------------------------------------------- |
-| `session`        | 会话开始，返回 `requestId`、`conversationId` 和用户摘要 |
-| `thinking`       | 可选的 Qwen thinking 增量；默认关闭时不会出现        |
+| `session`        | 会话开始，返回 `requestId` 和用户摘要                    |
 | `execution`      | DeepAgent 工具或计划执行过程，带 `stage` 和 `tool`  |
 | `answer`         | 最终回答的 Markdown 文本片段                        |
 | `done`           | 本次回答正常结束                                    |
@@ -85,19 +82,10 @@ data: {"type":"answer","content":"## 解题思路\n\n...","format":"markdown"}
 
 ```text
 event: session
-data: {"type":"session","requestId":"...","conversationId":"...","userId":"...","user":{"userName":"小明","vipType":"monthly","vipActive":true},"format":"json"}
+data: {"type":"session","requestId":"...","userId":"...","user":{"userName":"小明","vipType":"monthly","vipActive":true},"format":"json"}
 ```
 
-### 3.2 thinking
-
-```text
-event: thinking
-data: {"type":"thinking","content":"先判断这是初二数学的函数题。","format":"markdown"}
-```
-
-如果服务端显式开启 thinking，前端应按顺序拼接所有增量，建议放在默认折叠的“思考过程”区域。当前默认关闭，因此通常只会收到 `execution` 和 `answer`。
-
-### 3.3 execution
+### 3.2 execution
 
 ```text
 event: execution
@@ -113,7 +101,7 @@ data: {"type":"execution","stage":"start","tool":"collect_wrong_questions","cont
 
 执行记录按照 SSE 到达顺序追加到时间线即可。
 
-### 3.4 answer
+### 3.3 answer
 
 ```text
 event: answer
@@ -122,11 +110,11 @@ data: {"type":"answer","content":"## 解题思路\n\n先求导","format":"markdo
 
 所有 `answer.content` 按顺序拼接后就是完整的 Markdown 回答。片段边界可能落在 Markdown 语法中间，因此必须拼接完整字符串后再渲染，不能逐个片段单独渲染。
 
-### 3.5 done / error
+### 3.4 done / error
 
 ```text
 event: done
-data: {"type":"done","requestId":"...","conversationId":"...","durationMs":12345}
+data: {"type":"done","requestId":"...","durationMs":12345}
 
 event: error
 data: {"type":"error","status":500,"code":"AGENT_EXECUTION_FAILED","message":"学习助手执行失败"}
@@ -170,8 +158,7 @@ npm install rehype-highlight highlight.js
 
 ```ts
 export type AgentEvent =
-  | { type: 'session'; requestId: string; conversationId: string }
-  | { type: 'thinking'; content: string; format: 'markdown' }
+  | { type: 'session'; requestId: string }
   | {
       type: 'execution';
       stage: 'start' | 'end' | 'error' | 'note';
@@ -193,7 +180,6 @@ export async function streamAgentChat(options: {
   openid: string;
   message: string;
   imageBase64?: string;
-  conversationId?: string;
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
   signal?: AbortSignal;
   onEvent: (event: AgentEvent) => void;
@@ -208,7 +194,6 @@ export async function streamAgentChat(options: {
     body: JSON.stringify({
       message: options.message,
       imageBase64: options.imageBase64,
-      conversationId: options.conversationId,
       history: options.history,
     }),
     signal: options.signal,
@@ -277,7 +262,6 @@ export function LearningChat(props: {
   openid: string;
   baseURL: string;
 }) {
-  const [thinking, setThinking] = useState('');
   const [answer, setAnswer] = useState('');
   const [executions, setExecutions] = useState<
     Array<{ stage: string; tool?: string; content: string }>
@@ -301,9 +285,7 @@ export function LearningChat(props: {
         message,
         signal: abortRef.current.signal,
         onEvent(event) {
-          if (event.type === 'thinking') {
-            setThinking(value => value + event.content);
-          } else if (event.type === 'execution') {
+          if (event.type === 'execution') {
             setExecutions(value => [...value, event]);
           } else if (event.type === 'answer') {
             setAnswer(value => value + event.content);
@@ -323,15 +305,6 @@ export function LearningChat(props: {
 
   return (
     <div>
-      {thinking && (
-        <details>
-          <summary>思考过程</summary>
-          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]}>
-            {thinking}
-          </ReactMarkdown>
-        </details>
-      )}
-
       {executions.length > 0 && (
         <ol>
           {executions.map((item, index) => (
@@ -369,7 +342,7 @@ export function LearningChat(props: {
 - 代码块使用 `rehype-highlight`，按主题引入对应 CSS。
 - 表格使用 `remark-gfm`。
 - 流式期间只更新状态，不要在每次 token 到达时做数据库写入或昂贵布局计算。
-- 对长会话建议给 thinking 和 execution 设置最大高度、滚动和折叠，避免挤占答案区域。
+- 对长会话建议给 execution 设置最大高度、滚动和折叠，避免挤占答案区域。
 - `answer` 片段可能切在 Markdown 标记中间，必须拼接字符串后整体传给 `ReactMarkdown`。
 
 ### 5.1 英语朗读标记
@@ -440,7 +413,23 @@ function preparePronounceMarkdown(markdown: string) {
 
 严谨场景建议用 remark 插件在 AST 层处理朗读标记，避免简单字符串替换误伤 fenced code block 或行内代码。
 
-## 6. DeepAgent 工具
+## 6. DeepAgent 文件系统与沙箱边界
+
+Agent 使用 `FilesystemBackend`，不使用 `LocalShellBackend`：
+
+- 每个 `openid` 使用独立目录：
+  `output/learning-agent/<sha256>/`。
+- `virtualMode: true`：模型看到的 `/` 只会映射到该会话目录，不是主机根目录。
+- `..`、`~`、越出根目录的路径会被 SDK 拒绝。
+- 指向沙箱外部的 symlink 会被拒绝。
+- 显式权限规则先拒绝 `/etc/**`、`/proc/**`、`/Users/**`、`/private/**`、`/System/**`、`/usr/**` 等系统路径，再允许会话虚拟根内的其他读写。
+- 后端不支持 `execute`，因此不会向 Agent 注册 shell 命令工具。
+- 文件大小上限为 5MB。
+- DeepAgent 子 Agent 继承相同 backend 和 permission 规则。
+
+模型不能读取项目源码、服务端配置、密钥、用户 home 目录或其他会话的文件。
+
+## 7. DeepAgent 工具
 
 Agent 当前可使用：
 
@@ -456,12 +445,12 @@ Agent 当前可使用：
 
 文件类工具仍受现有用户次数限制。Agent 的文件系统沙箱位于当前项目 `output/learning-agent/` 下，并按用户和会话隔离，不能访问项目源码、配置或沙箱外路径。
 
-## 7. 前端接入注意事项
+## 8. 前端接入注意事项
 
 - 使用 POST SSE，不能使用浏览器原生 `EventSource`，因为它只支持 GET 且不能自定义请求体。
 - 使用 `AbortController` 支持“停止生成”。
 - SSE 连接失败后由用户主动重试；不要无限自动重连，避免重复执行文件工具。
 - 收到 `error` 后停止合并 answer 和 execution，保留已有内容供用户查看。
-- Qwen thinking 默认关闭；即使后端显式开启，`thinking` 也可能为空。
+- `userOrinted` 完全由服务端签名 HttpOnly Cookie session 的 `user_orinted` 字段维护，并在 SSE 开始前生成；前端无需提交会话 ID，也无需读取、接收或回传该字段。详见 [userOrinted 会话状态说明](./aichat-user-orinted.md)。
 - 最终内容必须按 Markdown 渲染，数学题需要启用 KaTeX。
 - 用户切换会话时终止旧的 fetch 请求。

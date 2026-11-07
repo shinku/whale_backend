@@ -1,5 +1,5 @@
 import { Readable } from 'stream';
-import { AiAgentController } from '../../src/controller/aiAgent';
+import { AiAgentController } from '../../src/controller/agent';
 
 const TINY_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z3u8AAAAASUVORK5CYII=';
@@ -24,7 +24,6 @@ describe('AiAgentController', () => {
         body: {
           message: '帮我制定一周数学复习计划',
           imageBase64: TINY_PNG,
-          conversationId: 'conversation-1',
           history: [
             {
               role: 'user',
@@ -36,6 +35,9 @@ describe('AiAgentController', () => {
       get: jest.fn((name: string) =>
         name === 'x-user-id' ? 'openid-1' : undefined
       ),
+      session: {
+        user_orinted: 'The user is translating English content.',
+      },
       set: jest.fn(),
     } as any;
     controller.userService = {
@@ -53,15 +55,16 @@ describe('AiAgentController', () => {
       }),
     } as any;
     controller.learningAgentService = {
+      prepareUserOrinted: jest
+        .fn()
+        .mockResolvedValue('The user is translating English content.'),
       streamChat: jest.fn().mockReturnValue(
         (async function* () {
-          yield 'event: thinking\ndata: {"type":"thinking","content":"分析","format":"markdown"}\n\n';
           yield 'event: answer\ndata: {"type":"answer","content":"# 计划","format":"markdown"}\n\n';
-          yield 'event: done\ndata: {"type":"done","requestId":"r1","conversationId":"conversation-1","durationMs":1}\n\n';
+          yield 'event: done\ndata: {"type":"done","requestId":"r1","durationMs":1}\n\n';
         })()
       ),
     } as any;
-
     const stream = await controller.chat();
     const output = await collectStream(stream);
 
@@ -69,7 +72,6 @@ describe('AiAgentController', () => {
       expect.objectContaining({
         message: '帮我制定一周数学复习计划',
         imageBase64: `data:image/png;base64,${TINY_PNG}`,
-        conversationId: 'conversation-1',
         history: [
           {
             role: 'user',
@@ -79,14 +81,21 @@ describe('AiAgentController', () => {
       }),
       expect.objectContaining({
         openid: 'openid-1',
-      })
+      }),
+      'The user is translating English content.'
+    );
+    expect(
+      controller.learningAgentService.prepareUserOrinted
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({ message: '帮我制定一周数学复习计划' }),
+      'The user is translating English content.'
+    );
+    expect(controller.ctx.session.user_orinted).toBe(
+      'The user is translating English content.'
     );
     expect(controller.ctx.type).toBe('text/event-stream; charset=utf-8');
-    expect(controller.ctx.set).toHaveBeenCalledWith(
-      'X-Accel-Buffering',
-      'no'
-    );
-    expect(output).toContain('event: thinking');
+    expect(controller.ctx.set).toHaveBeenCalledWith('X-Accel-Buffering', 'no');
+    expect(output).not.toContain('event: thinking');
     expect(output).toContain('event: answer');
     expect(output).toContain('event: done');
   });

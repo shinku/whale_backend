@@ -201,11 +201,11 @@ async function fetchSubjects(requestid) {
 | --------------- | --------------------- | ------------------------------------------ |
 | `id`            | int，自增主键         | 记录 id                                    |
 | `requestid`     | varchar(64)，**索引** | 接口返回给前端的唯一请求 id（uuid）        |
-| `store_content` | text                  | 出题结果（模型返回的纯文本）               |
+| `store_content` | text                  | 出题或图片翻译结果（翻译存 OSS URL）       |
 | `createdAt`     | datetime              | 入库时间，sequelize 自动维护，用于过期判断 |
 | `updatedAt`     | datetime              | 更新时间，sequelize 自动维护               |
 
-索引：`idx_ai_subject_store_requestid`（`requestid`）。
+唯一索引：`idx_ai_subject_store_requestid`（`requestid`）。
 
 ### 6.2 有效期与清理
 

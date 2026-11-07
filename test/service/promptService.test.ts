@@ -58,6 +58,7 @@ describe('test/service/promptService.test.ts', () => {
     const prompt = await promptService.getPrompt('aichat/chat');
 
     expect(prompt).toContain('{{USER_CONTEXT}}');
+    expect(prompt).toContain('{{USER_ORINTED}}');
     expect(prompt).toContain('范围边界（最高优先级）');
     expect(prompt).toContain('read_chat_history');
   });
